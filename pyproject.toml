@@ -1,11 +1,8 @@
 [project]
-name = "greynirwasm"
+name = "lemma-is"
 version = "0.1.0"
-description = "Add your description here"
+description = "Build scripts for lemma-is data files"
 requires-python = ">=3.13"
 dependencies = [
     "icegrams>=1.1.6",
-    "islenska>=1.1.1",
-    "reynir>=3.6.1",
-    "tokenizer>=3.6.2",
 ]
