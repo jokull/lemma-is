@@ -190,123 +190,49 @@ const lemmatizer = BinaryLemmatizer.loadFromBuffer(
 
 ## PostgreSQL Full-Text Search
 
-PostgreSQL has no built-in Icelandic stemmer. Use lemma-is to pre-process text, then store lemmas in a `tsvector` column with the `simple` configuration (which lowercases but doesn't stem).
-
-### Schema
+PostgreSQL has no built-in Icelandic stemmer. Use lemma-is to pre-process text, then store lemmas in a `tsvector` column with the `simple` configuration.
 
 ```sql
 CREATE TABLE documents (
   id SERIAL PRIMARY KEY,
-  title TEXT NOT NULL,
-  body TEXT NOT NULL,
-  -- Store pre-computed lemmas as tsvector
+  title TEXT,
+  body TEXT,
   search_vector TSVECTOR
 );
-
--- GIN index for fast full-text search
 CREATE INDEX documents_search_idx ON documents USING GIN (search_vector);
 ```
 
-### Indexing Documents
-
-Lemmatize content in your application, then store as space-separated string:
+Lemmatize in your app, store as space-separated string:
 
 ```typescript
-import { extractIndexableLemmas, BinaryLemmatizer } from "lemma-is";
+const lemmas = extractIndexableLemmas(text, lemmatizer, { removeStopwords: true });
 
-const lemmatizer = await BinaryLemmatizer.load("/data/lemma-is.bin");
-
-async function indexDocument(db, title: string, body: string) {
-  const text = `${title} ${body}`;
-  const lemmas = extractIndexableLemmas(text, lemmatizer, { removeStopwords: true });
-  const lemmaString = Array.from(lemmas).join(" ");
-
-  await db.query(
-    `INSERT INTO documents (title, body, search_vector)
-     VALUES ($1, $2, to_tsvector('simple', $3))`,
-    [title, body, lemmaString]
-  );
-}
-```
-
-### Querying
-
-Lemmatize search terms the same way:
-
-```typescript
-async function search(db, query: string) {
-  // Lemmatize the search query
-  const lemmas = extractIndexableLemmas(query, lemmatizer, { removeStopwords: true });
-  const lemmaString = Array.from(lemmas).join(" ");
-
-  return db.query(
-    `SELECT id, title, ts_rank(search_vector, query) AS rank
-     FROM documents, plainto_tsquery('simple', $1) query
-     WHERE search_vector @@ query
-     ORDER BY rank DESC`,
-    [lemmaString]
-  );
-}
-
-// User searches for "börnum" (children, dative plural)
-// → lemmatized to "barn"
-// → matches documents containing any form: barn, börn, börnin, barnið...
-await search(db, "börnum");
-```
-
-### Why `simple`?
-
-| Configuration | Behavior | Use case |
-|--------------|----------|----------|
-| `english` | Stems + removes stopwords | English text |
-| `simple` | Lowercases only | Pre-lemmatized text, tags |
-| Direct cast `::tsvector` | No processing | Full control |
-
-The `simple` configuration is ideal because:
-- **No stemming** – our lemmas are already normalized
-- **Lowercasing** – matches our lowercase lemmas
-- **Preserves all words** – no stop word removal (we handle that)
-
-### Ranking and Weights
-
-Weight title matches higher than body:
-
-```typescript
-const lemmaString = Array.from(lemmas).join(" ");
-
-// Use setweight() for title vs body distinction
 await db.query(
   `INSERT INTO documents (title, body, search_vector)
-   VALUES ($1, $2,
-     setweight(to_tsvector('simple', $3), 'A') ||
-     setweight(to_tsvector('simple', $4), 'B')
-   )`,
-  [title, body, titleLemmas, bodyLemmas]
+   VALUES ($1, $2, to_tsvector('simple', $3))`,
+  [title, body, Array.from(lemmas).join(" ")]
 );
 ```
 
-### Keeping Indexes Updated
+Query by lemmatizing search terms the same way:
 
-Use a trigger or update on write:
+```typescript
+const lemmas = extractIndexableLemmas(query, lemmatizer);
 
-```sql
--- Option 1: Application handles it (recommended)
--- Update search_vector when inserting/updating via your app
+const results = await db.query(
+  `SELECT *, ts_rank(search_vector, q) AS rank
+   FROM documents, plainto_tsquery('simple', $1) q
+   WHERE search_vector @@ q
+   ORDER BY rank DESC`,
+  [Array.from(lemmas).join(" ")]
+);
 
--- Option 2: Trigger (if you store raw lemma string)
-ALTER TABLE documents ADD COLUMN lemmas TEXT;
-
-CREATE FUNCTION documents_search_update() RETURNS TRIGGER AS $$
-BEGIN
-  NEW.search_vector := to_tsvector('simple', COALESCE(NEW.lemmas, ''));
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER documents_search_trigger
-  BEFORE INSERT OR UPDATE ON documents
-  FOR EACH ROW EXECUTE FUNCTION documents_search_update();
+// User searches "börnum" → lemmatized to "barn" → matches all forms
 ```
+
+**Why `simple`?** It lowercases but doesn't stem—our lemmas are already normalized. Use `setweight()` to boost title matches over body.
+
+**Diacritics:** PostgreSQL's `unaccent` extension strips accents, but **don't use it for Icelandic**. Characters like á, ö, þ, ð are distinct letters, not accented variants. "á" (river/on/owns) ≠ "a". Preserve diacritics for correct matching.
 
 ## Acknowledgments
 
