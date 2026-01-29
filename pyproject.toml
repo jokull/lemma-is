@@ -1,0 +1,11 @@
+[project]
+name = "greynirwasm"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "icegrams>=1.1.6",
+    "islenska>=1.1.1",
+    "reynir>=3.6.1",
+    "tokenizer>=3.6.2",
+]

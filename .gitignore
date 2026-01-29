@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+.venv/
+
+# Build outputs
+dist/
+data-dist/
+
+# Raw data (too large for git, regenerate with scripts/)
+data/
+
+# OS files
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log

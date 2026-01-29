@@ -1,0 +1,51 @@
+{
+  "name": "lemma-is",
+  "version": "0.1.0",
+  "description": "Icelandic word form to lemma lookup for browser and Node.js",
+  "keywords": [
+    "icelandic",
+    "nlp",
+    "lemmatization",
+    "stemming",
+    "search",
+    "bin"
+  ],
+  "license": "MIT",
+  "author": "Jökull Sólberg",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./data/*": "./data-dist/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "data-dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "build:data": "uv run python scripts/build-data.py",
+    "test": "NODE_OPTIONS='--max-old-space-size=8192' vitest run",
+    "test:watch": "NODE_OPTIONS='--max-old-space-size=8192' vitest",
+    "typecheck": "tsc --noEmit",
+    "serve": "python3 -m http.server 8080"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsdown": "^0.20.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "packageManager": "pnpm@10.10.0",
+  "dependencies": {
+    "dawg-lookup": "^2.2.1",
+    "dawg-set": "^0.0.0",
+    "tokenize-is": "^0.1.0",
+    "trie-mapping": "^4.0.0"
+  }
+}

@@ -1,0 +1,51 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Processing Pipeline > Benchmark Metrics > CONVERSATIONAL paragraph > CONVERSATIONAL metrics snapshot 1`] = `
+{
+  "ambiguityRate": 0.76,
+  "compoundsFound": 0,
+  "coverage": 0.97,
+  "entitiesSkipped": 0,
+  "uniqueLemmas": 24,
+}
+`;
+
+exports[`Processing Pipeline > Benchmark Metrics > LEGAL paragraph > LEGAL metrics snapshot 1`] = `
+{
+  "ambiguityRate": 0.68,
+  "compoundsFound": 3,
+  "coverage": 0.86,
+  "entitiesSkipped": 0,
+  "uniqueLemmas": 26,
+}
+`;
+
+exports[`Processing Pipeline > Benchmark Metrics > LITERARY paragraph > LITERARY metrics snapshot 1`] = `
+{
+  "ambiguityRate": 0.57,
+  "compoundsFound": 0,
+  "coverage": 1,
+  "entitiesSkipped": 0,
+  "uniqueLemmas": 18,
+}
+`;
+
+exports[`Processing Pipeline > Benchmark Metrics > NEWS paragraph > NEWS metrics snapshot 1`] = `
+{
+  "ambiguityRate": 0.63,
+  "compoundsFound": 4,
+  "coverage": 0.96,
+  "entitiesSkipped": 0,
+  "uniqueLemmas": 37,
+}
+`;
+
+exports[`Processing Pipeline > Benchmark Metrics > TECHNICAL paragraph > TECHNICAL metrics snapshot 1`] = `
+{
+  "ambiguityRate": 0.83,
+  "compoundsFound": 5,
+  "coverage": 0.94,
+  "entitiesSkipped": 0,
+  "uniqueLemmas": 33,
+}
+`;
