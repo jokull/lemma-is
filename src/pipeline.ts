@@ -6,12 +6,10 @@
  */
 
 import { tokenize, type Token } from "tokenize-is";
-import { BigramLookup } from "./bigrams.js";
-import { UnigramLookup } from "./unigrams.js";
 import { Disambiguator, type DisambiguatedToken } from "./disambiguate.js";
 import { CompoundSplitter, type CompoundSplit } from "./compounds.js";
 import { STOPWORDS_IS } from "./stopwords.js";
-import type { LemmatizerLike } from "./types.js";
+import type { LemmatizerLike, BigramProvider } from "./types.js";
 
 /**
  * Token kinds that should be lemmatized.
@@ -58,16 +56,28 @@ export interface ProcessedToken {
  * Options for text processing.
  */
 export interface ProcessOptions {
-  /** Bigram lookup for disambiguation */
-  bigrams?: BigramLookup;
-  /** Unigram lookup for fallback scoring */
-  unigrams?: UnigramLookup;
+  /** Bigram provider for disambiguation */
+  bigrams?: BigramProvider;
   /** Compound splitter for compound word detection */
   compoundSplitter?: CompoundSplitter;
   /** Remove stopwords from results */
   removeStopwords?: boolean;
   /** Include numbers in results */
   includeNumbers?: boolean;
+  /**
+   * Index all candidate lemmas, not just the disambiguated one.
+   * Better recall for search (finds more matches), worse precision.
+   * Set to false if you only want the most likely lemma.
+   * Default: true
+   */
+  indexAllCandidates?: boolean;
+  /**
+   * Try compound splitting even for known words.
+   * Useful when BÍN contains the compound but you still want parts indexed.
+   * Set to false to only split unknown words.
+   * Default: true
+   */
+  alwaysTryCompounds?: boolean;
 }
 
 /**
@@ -83,7 +93,12 @@ export function processText(
   lemmatizer: LemmatizerLike,
   options: ProcessOptions = {}
 ): ProcessedToken[] {
-  const { bigrams, unigrams, compoundSplitter, includeNumbers = false } = options;
+  const {
+    bigrams,
+    compoundSplitter,
+    includeNumbers = false,
+    alwaysTryCompounds = true,
+  } = options;
 
   // Step 1: Tokenize
   const tokens = tokenize(text);
@@ -136,19 +151,17 @@ export function processText(
         isEntity: false,
       };
 
-      // Try compound splitting if lemmatization returns unknown word
-      if (
-        compoundSplitter &&
-        lemmas.length === 1 &&
-        lemmas[0] === tokenText.toLowerCase()
-      ) {
+      // Try compound splitting
+      // - Always if alwaysTryCompounds is set (for better search recall)
+      // - Otherwise only if lemmatization returns unknown word
+      const isUnknownWord = lemmas.length === 1 && lemmas[0] === tokenText.toLowerCase();
+      if (compoundSplitter && (alwaysTryCompounds || isUnknownWord)) {
         const split = compoundSplitter.split(tokenText);
         if (split.isCompound) {
           processed.compoundSplit = split;
-          // Add component lemmas from parts
-          processed.lemmas = [
-            ...split.parts.flatMap((c) => lemmatizer.lemmatize(c)),
-          ];
+          // Add component lemmas from parts (in addition to direct lemmas)
+          const partLemmas = split.parts.flatMap((c) => lemmatizer.lemmatize(c));
+          processed.lemmas = [...new Set([...lemmas, ...partLemmas])];
         }
       }
 
@@ -168,7 +181,7 @@ export function processText(
 
   // Step 3: Disambiguate if we have bigram data
   if (bigrams && wordTokens.length > 0) {
-    const disambiguator = new Disambiguator(lemmatizer, bigrams, { unigrams });
+    const disambiguator = new Disambiguator(lemmatizer, bigrams);
 
     for (let i = 0; i < wordTokens.length; i++) {
       const { index, token } = wordTokens[i];
@@ -185,17 +198,12 @@ export function processText(
       results[index].confidence = result.confidence;
     }
   } else {
-    // No disambiguation - use first lemma or unigram-based selection
+    // No disambiguation - use first lemma
     for (const { index } of wordTokens) {
       const processed = results[index];
       if (processed.lemmas.length > 0) {
-        if (unigrams && processed.lemmas.length > 1) {
-          processed.disambiguated = unigrams.pickMostFrequent(processed.lemmas) ?? processed.lemmas[0];
-          processed.confidence = 0.5; // Medium confidence for unigram-only
-        } else {
-          processed.disambiguated = processed.lemmas[0];
-          processed.confidence = processed.lemmas.length === 1 ? 1.0 : 0.5;
-        }
+        processed.disambiguated = processed.lemmas[0];
+        processed.confidence = processed.lemmas.length === 1 ? 1.0 : 0.5;
       }
     }
   }
@@ -216,7 +224,7 @@ export function extractIndexableLemmas(
   lemmatizer: LemmatizerLike,
   options: ProcessOptions = {}
 ): Set<string> {
-  const { removeStopwords = false } = options;
+  const { removeStopwords = false, indexAllCandidates = true } = options;
 
   const processed = processText(text, lemmatizer, options);
   const lemmas = new Set<string>();
@@ -227,10 +235,19 @@ export function extractIndexableLemmas(
       continue;
     }
 
-    // Use disambiguated lemma if available
-    if (token.disambiguated) {
-      if (!removeStopwords || !STOPWORDS_IS.has(token.disambiguated)) {
-        lemmas.add(token.disambiguated);
+    if (indexAllCandidates) {
+      // Index ALL candidate lemmas for better search recall
+      for (const lemma of token.lemmas) {
+        if (!removeStopwords || !STOPWORDS_IS.has(lemma)) {
+          lemmas.add(lemma);
+        }
+      }
+    } else {
+      // Use disambiguated lemma if available (better precision)
+      if (token.disambiguated) {
+        if (!removeStopwords || !STOPWORDS_IS.has(token.disambiguated)) {
+          lemmas.add(token.disambiguated);
+        }
       }
     }
 
@@ -289,8 +306,7 @@ export function runBenchmark(
   lemmatizer: LemmatizerLike,
   strategy: ProcessingStrategy,
   resources: {
-    bigrams?: BigramLookup;
-    unigrams?: UnigramLookup;
+    bigrams?: BigramProvider;
     compoundSplitter?: CompoundSplitter;
   } = {}
 ): ProcessingMetrics {
@@ -339,11 +355,9 @@ export function runBenchmark(
       // tokenized + bigram disambiguation
       processed = processText(text, lemmatizer, {
         bigrams: resources.bigrams,
-        unigrams: resources.unigrams,
       });
       lemmas = extractIndexableLemmas(text, lemmatizer, {
         bigrams: resources.bigrams,
-        unigrams: resources.unigrams,
       });
       break;
     }
@@ -352,12 +366,10 @@ export function runBenchmark(
       // disambiguated + compounds
       processed = processText(text, lemmatizer, {
         bigrams: resources.bigrams,
-        unigrams: resources.unigrams,
         compoundSplitter: resources.compoundSplitter,
       });
       lemmas = extractIndexableLemmas(text, lemmatizer, {
         bigrams: resources.bigrams,
-        unigrams: resources.unigrams,
         compoundSplitter: resources.compoundSplitter,
       });
       break;

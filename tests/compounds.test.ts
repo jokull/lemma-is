@@ -1,32 +1,26 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "fs";
-import { gunzipSync } from "zlib";
 import { join } from "path";
 import {
-  Lemmatizer,
+  BinaryLemmatizer,
   CompoundSplitter,
   createKnownLemmaSet,
 } from "../src/index.js";
 
 describe("CompoundSplitter", () => {
-  let lemmatizer: Lemmatizer;
+  let lemmatizer: BinaryLemmatizer;
   let splitter: CompoundSplitter;
   let knownLemmas: Set<string>;
 
   beforeAll(() => {
     const dataDir = join(import.meta.dirname, "..", "data-dist");
-
-    const lemmasBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lemmas.txt.gz"))
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     );
-    const lookupBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lookup.tsv.gz"))
-    );
-    lemmatizer = Lemmatizer.loadFromBuffers(lemmasBuffer, lookupBuffer);
 
-    // Create set of known lemmas
-    const lemmasText = lemmasBuffer.toString("utf-8");
-    const lemmasList = lemmasText.split("\n").filter((l) => l.length > 0);
+    // Create set of known lemmas from BinaryLemmatizer
+    const lemmasList = lemmatizer.getAllLemmas();
     knownLemmas = createKnownLemmaSet(lemmasList);
 
     splitter = new CompoundSplitter(lemmatizer, knownLemmas);

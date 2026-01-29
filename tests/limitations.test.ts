@@ -7,37 +7,25 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "fs";
-import { gunzipSync } from "zlib";
 import { join } from "path";
 import {
-  Lemmatizer,
-  BigramLookup,
+  BinaryLemmatizer,
   Disambiguator,
   CompoundSplitter,
   createKnownLemmaSet,
-  extractLemmas,
 } from "../src/index.js";
 
 describe("LIMITATION: Disambiguation without sufficient context", () => {
-  let lemmatizer: Lemmatizer;
-  let bigrams: BigramLookup;
+  let lemmatizer: BinaryLemmatizer;
   let disambiguator: Disambiguator;
 
   beforeAll(() => {
     const dataDir = join(import.meta.dirname, "..", "data-dist");
-    const lemmasBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lemmas.txt.gz"))
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     );
-    const lookupBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lookup.tsv.gz"))
-    );
-    lemmatizer = Lemmatizer.loadFromBuffers(lemmasBuffer, lookupBuffer);
-
-    const bigramsBuffer = gunzipSync(
-      readFileSync(join(dataDir, "bigrams.json.gz"))
-    );
-    bigrams = BigramLookup.loadFromBuffer(bigramsBuffer);
-    disambiguator = new Disambiguator(lemmatizer, bigrams);
+    disambiguator = new Disambiguator(lemmatizer, lemmatizer);
   });
 
   it("single word without context has low confidence", () => {
@@ -70,25 +58,16 @@ describe("LIMITATION: Disambiguation without sufficient context", () => {
 });
 
 describe("LIMITATION: Bigrams only (no trigrams)", () => {
-  let lemmatizer: Lemmatizer;
-  let bigrams: BigramLookup;
+  let lemmatizer: BinaryLemmatizer;
   let disambiguator: Disambiguator;
 
   beforeAll(() => {
     const dataDir = join(import.meta.dirname, "..", "data-dist");
-    const lemmasBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lemmas.txt.gz"))
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     );
-    const lookupBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lookup.tsv.gz"))
-    );
-    lemmatizer = Lemmatizer.loadFromBuffers(lemmasBuffer, lookupBuffer);
-
-    const bigramsBuffer = gunzipSync(
-      readFileSync(join(dataDir, "bigrams.json.gz"))
-    );
-    bigrams = BigramLookup.loadFromBuffer(bigramsBuffer);
-    disambiguator = new Disambiguator(lemmatizer, bigrams);
+    disambiguator = new Disambiguator(lemmatizer, lemmatizer);
   });
 
   it("loses context in 3+ word patterns", () => {
@@ -109,22 +88,18 @@ describe("LIMITATION: Bigrams only (no trigrams)", () => {
 });
 
 describe("LIMITATION: Compound splitting heuristics", () => {
-  let lemmatizer: Lemmatizer;
+  let lemmatizer: BinaryLemmatizer;
   let splitter: CompoundSplitter;
   let knownLemmas: Set<string>;
 
   beforeAll(() => {
     const dataDir = join(import.meta.dirname, "..", "data-dist");
-    const lemmasBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lemmas.txt.gz"))
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     );
-    const lookupBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lookup.tsv.gz"))
-    );
-    lemmatizer = Lemmatizer.loadFromBuffers(lemmasBuffer, lookupBuffer);
 
-    const lemmasText = lemmasBuffer.toString("utf-8");
-    const lemmasList = lemmasText.split("\n").filter((l) => l.length > 0);
+    const lemmasList = lemmatizer.getAllLemmas();
     knownLemmas = createKnownLemmaSet(lemmasList);
     splitter = new CompoundSplitter(lemmatizer, knownLemmas);
   });
@@ -164,17 +139,14 @@ describe("LIMITATION: Compound splitting heuristics", () => {
 });
 
 describe("LIMITATION: No handling of neologisms or brand names", () => {
-  let lemmatizer: Lemmatizer;
+  let lemmatizer: BinaryLemmatizer;
 
   beforeAll(() => {
     const dataDir = join(import.meta.dirname, "..", "data-dist");
-    const lemmasBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lemmas.txt.gz"))
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     );
-    const lookupBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lookup.tsv.gz"))
-    );
-    lemmatizer = Lemmatizer.loadFromBuffers(lemmasBuffer, lookupBuffer);
   });
 
   it("returns unknown words as-is (but BÍN is surprisingly complete!)", () => {
@@ -202,17 +174,14 @@ describe("LIMITATION: No handling of neologisms or brand names", () => {
 });
 
 describe("LIMITATION: Article-fused forms", () => {
-  let lemmatizer: Lemmatizer;
+  let lemmatizer: BinaryLemmatizer;
 
   beforeAll(() => {
     const dataDir = join(import.meta.dirname, "..", "data-dist");
-    const lemmasBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lemmas.txt.gz"))
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     );
-    const lookupBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lookup.tsv.gz"))
-    );
-    lemmatizer = Lemmatizer.loadFromBuffers(lemmasBuffer, lookupBuffer);
   });
 
   it("definite articles are fused with nouns", () => {
@@ -232,17 +201,14 @@ describe("LIMITATION: Article-fused forms", () => {
 });
 
 describe("LIMITATION: No morphological generation", () => {
-  let lemmatizer: Lemmatizer;
+  let lemmatizer: BinaryLemmatizer;
 
   beforeAll(() => {
     const dataDir = join(import.meta.dirname, "..", "data-dist");
-    const lemmasBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lemmas.txt.gz"))
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     );
-    const lookupBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lookup.tsv.gz"))
-    );
-    lemmatizer = Lemmatizer.loadFromBuffers(lemmasBuffer, lookupBuffer);
   });
 
   it("cannot go from lemma to inflected forms", () => {

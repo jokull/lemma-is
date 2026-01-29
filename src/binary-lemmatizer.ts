@@ -14,7 +14,7 @@
  * - Bigrams: word1/word2 offsets + lengths + frequencies (sorted)
  */
 
-import type { WordClass, LemmaWithPOS, LemmatizerLike } from "./types.js";
+import type { WordClass, LemmaWithPOS, LemmatizerLike, BigramProvider } from "./types.js";
 
 const MAGIC = 0x4c454d41; // "LEMA"
 
@@ -40,7 +40,7 @@ export interface BinaryLemmatizeOptions {
   wordClass?: WordClass;
 }
 
-export class BinaryLemmatizer implements LemmatizerLike {
+export class BinaryLemmatizer implements LemmatizerLike, BigramProvider {
   private buffer: ArrayBuffer;
   private stringPool: Uint8Array;
   private lemmaOffsets: Uint32Array;
@@ -332,6 +332,14 @@ export class BinaryLemmatizer implements LemmatizerLike {
   }
 
   /**
+   * Alias for bigramFreq to satisfy BigramProvider interface.
+   * @returns Frequency count, or 0 if not found
+   */
+  freq(word1: string, word2: string): number {
+    return this.bigramFreq(word1, word2);
+  }
+
+  /**
    * Check if a word is known to the lemmatizer.
    */
   isKnown(word: string): boolean {
@@ -364,5 +372,17 @@ export class BinaryLemmatizer implements LemmatizerLike {
    */
   get bufferSize(): number {
     return this.buffer.byteLength;
+  }
+
+  /**
+   * Get all unique lemmas from the binary data.
+   * Useful for compound splitting.
+   */
+  getAllLemmas(): string[] {
+    const lemmas: string[] = [];
+    for (let i = 0; i < this.lemmaCount; i++) {
+      lemmas.push(this.getLemma(i));
+    }
+    return lemmas;
   }
 }

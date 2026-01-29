@@ -69,3 +69,11 @@ export interface LemmatizerLike {
   lemmatize(word: string): string[];
   lemmatizeWithPOS?(word: string): LemmaWithPOS[];
 }
+
+/**
+ * Interface for bigram frequency lookup.
+ * Used for disambiguation scoring.
+ */
+export interface BigramProvider {
+  freq(word1: string, word2: string): number;
+}

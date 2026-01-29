@@ -107,12 +107,13 @@ import { BinaryLemmatizer, processText } from "lemma-is";
 
 const lemmatizer = await BinaryLemmatizer.load("/data/lemma-is.bin");
 
+// BinaryLemmatizer has built-in bigram frequencies for disambiguation
 // "við erum" = "we are" → bigrams favor pronoun "ég" over preposition
-const processed = processText("Við erum hér", lemmatizer);
+const processed = processText("Við erum hér", lemmatizer, { bigrams: lemmatizer });
 // → disambiguated: "ég" for "við" (high confidence)
 
 // "á morgun" = "tomorrow" → bigrams favor preposition
-const processed2 = processText("Ég fer á morgun", lemmatizer);
+const processed2 = processText("Ég fer á morgun", lemmatizer, { bigrams: lemmatizer });
 // → disambiguated: "á" for "á" (not "eiga")
 ```
 
@@ -164,17 +165,50 @@ import {
 } from "lemma-is";
 
 const lemmatizer = await BinaryLemmatizer.load("/data/lemma-is.bin");
+const knownLemmas = createKnownLemmaSet(lemmatizer.getAllLemmas());
 const splitter = new CompoundSplitter(lemmatizer, knownLemmas);
 
 const text = "Landbúnaðarráðherra ræddi húsnæðislánareglur";
 
+// BinaryLemmatizer implements BigramProvider, so pass it for disambiguation
 const lemmas = extractIndexableLemmas(text, lemmatizer, {
-  bigrams,
+  bigrams: lemmatizer,
   compoundSplitter: splitter,
   removeStopwords: true,
 });
 // → Set { "landbúnaður", "ráðherra", "landbúnaðarráðherra",
 //         "ræða", "húsnæði", "lán", "regla", ... }
+```
+
+### Search-Optimized Defaults
+
+The defaults favor **recall over precision**—better for search where missing results is worse than extra results:
+
+```typescript
+const lemmas = extractIndexableLemmas(text, lemmatizer, {
+  bigrams: lemmatizer,
+  compoundSplitter: splitter,
+  // These are the defaults:
+  // indexAllCandidates: true  — indexes ALL lemma candidates
+  // alwaysTryCompounds: true  — splits compounds even if known in BÍN
+});
+```
+
+With these defaults:
+- `"á"` → indexes both `"á"` (preposition) AND `"eiga"` (verb)
+- `"húsnæðislán"` → indexes `"húsnæðislán"`, `"húsnæði"`, AND `"lán"`
+
+### Precision Mode
+
+If you need only the most likely lemma (chatbots, translation), disable the search optimizations:
+
+```typescript
+const lemmas = extractIndexableLemmas(text, lemmatizer, {
+  bigrams: lemmatizer,
+  compoundSplitter: splitter,
+  indexAllCandidates: false,  // only disambiguated lemma
+  alwaysTryCompounds: false,  // only split unknown words
+});
 ```
 
 ## Word Classes
@@ -280,6 +314,134 @@ const results = await db.query(
 **Why `simple`?** It lowercases but doesn't stem—our lemmas are already normalized. Use `setweight()` to boost title matches over body.
 
 **Diacritics:** PostgreSQL's `unaccent` extension strips accents, but **don't use it for Icelandic**. Characters like á, ö, þ, ð are distinct letters, not accented variants. "á" (river/on/owns) ≠ "a". Preserve diacritics for correct matching.
+
+## Limitations
+
+This library makes tradeoffs for portability. Know what you're getting.
+
+### File Size
+
+The binary is **107 MB**. For serverless/edge with cold starts, that's significant. For browser apps, load in a Web Worker and cache aggressively.
+
+```typescript
+// Cloudflare Workers: fits in 128MB memory limit, but cold starts are slow
+// Vercel Edge: works, but consider if you really need client-side lemmatization
+// Browser: use Service Worker caching, load once per session
+```
+
+Consider server-side lemmatization if latency matters more than offline support.
+
+### No Query Expansion
+
+You can go **word → lemma** but not **lemma → words**:
+
+```typescript
+lemmatizer.lemmatize("hestinum"); // → ["hestur"] ✓
+
+// But you CANNOT do:
+lemmatizer.expand("hestur");
+// → ["hestur", "hest", "hesti", "hests", "hestinn", "hestinum", ...] ✗
+```
+
+This matters for **search result highlighting**. If a user searches "hestur" and the document contains "hestinum", you can't easily highlight the match without the reverse mapping.
+
+**Workaround:** Store original text alongside lemmas, use regex patterns for common suffixes.
+
+### Disambiguation Limits
+
+Bigram disambiguation only works when the word pair exists in the corpus data:
+
+```typescript
+// Common phrase: bigrams help
+processText("við erum", lemmatizer, { bigrams: lemmatizer });
+// → "við" disambiguated to "ég" (we) with high confidence
+
+// Rare/unusual phrase: no bigram data
+processText("við flæktumst", lemmatizer, { bigrams: lemmatizer });
+// → "við" picks first candidate, low confidence
+```
+
+Without context, ambiguous words fall back to arbitrary ordering:
+
+```typescript
+// Single word, no context
+lemmatizer.lemmatize("á");
+// → ["á", "eiga"] — but which is more likely? No way to know.
+
+// The preposition "á" is ~100x more common than verb "eiga" in this form,
+// but we don't have unigram frequencies to use as tiebreaker.
+```
+
+**For search indexing:** Use `indexAllCandidates: true` to index all lemmas and let ranking sort out relevance. For applications needing precision (chatbots, translation), use GreynirEngine instead.
+
+### Compound Splitting Heuristics
+
+The splitter uses simple rules that miss edge cases:
+
+**Three-part compounds only split once:**
+```typescript
+splitter.split("þjóðmálaráðherra");
+// → ["þjóðmál", "ráðherra"] — missing "þjóð" as separate part
+// Ideal: ["þjóð", "mál", "ráðherra"]
+```
+
+**Inflected first parts may not match:**
+```typescript
+splitter.split("húseignir");
+// → { isCompound: false } — "hús" appears as "hús" not "húsa"
+// The compound IS "hús" + "eignir" but heuristics miss it
+```
+
+**May over-split valid words:**
+```typescript
+splitter.split("landsins");
+// This is NOT a compound — it's "land" + genitive suffix "-sins"
+// Correctly returns { isCompound: false }, but edge cases exist
+```
+
+**Mitigations:**
+- Use `alwaysTryCompounds: true` to split even known words
+- Use `minPartLength: 2` in CompoundSplitter for more aggressive splitting
+- Over-indexing is usually better than under-indexing for search
+
+### Not a Parser
+
+This is a lookup table, not a grammatical parser. It doesn't understand:
+
+- Sentence structure or syntax
+- Which reading is correct in context (beyond bigram hints)
+- Named entity recognition (people, places, companies)
+- Semantic meaning or word sense
+
+For applications needing grammatical analysis, use [GreynirEngine](https://github.com/mideind/GreynirEngine). lemma-is is for search indexing where "good enough" recall beats perfect precision.
+
+## Development
+
+### Testing
+
+Tests use [Vitest](https://vitest.dev/):
+
+```bash
+pnpm test           # run all tests
+pnpm test:watch     # watch mode
+npx vitest run --update  # update snapshots
+```
+
+Test files:
+- `binary-lemmatizer.test.ts` — Core lemmatization and bigram lookup
+- `compounds.test.ts` — Compound word splitting
+- `integration.test.ts` — Full pipeline, search indexing options
+- `benchmark.test.ts` — Performance and metrics snapshots
+- `icelandic-tricky.test.ts` — Edge cases, morphology examples
+- `limitations.test.ts` — Documented limitations and research notes
+
+### Building
+
+```bash
+pnpm build          # build dist/
+pnpm typecheck      # type check without emitting
+pnpm build:data     # rebuild binary from BÍN source
+```
 
 ## Acknowledgments
 

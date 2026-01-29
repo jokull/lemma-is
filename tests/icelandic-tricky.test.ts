@@ -7,37 +7,26 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "fs";
-import { gunzipSync } from "zlib";
 import { join } from "path";
 import {
-  Lemmatizer,
-  BigramLookup,
+  BinaryLemmatizer,
   Disambiguator,
   CompoundSplitter,
   createKnownLemmaSet,
-  extractLemmas,
+  extractIndexableLemmas,
 } from "../src/index.js";
 
 describe("A-Ha! Icelandic Morphology", () => {
-  let lemmatizer: Lemmatizer;
-  let bigrams: BigramLookup;
+  let lemmatizer: BinaryLemmatizer;
   let disambiguator: Disambiguator;
 
   beforeAll(() => {
     const dataDir = join(import.meta.dirname, "..", "data-dist");
-    const lemmasBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lemmas.txt.gz"))
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     );
-    const lookupBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lookup.tsv.gz"))
-    );
-    lemmatizer = Lemmatizer.loadFromBuffers(lemmasBuffer, lookupBuffer);
-
-    const bigramsBuffer = gunzipSync(
-      readFileSync(join(dataDir, "bigrams.json.gz"))
-    );
-    bigrams = BigramLookup.loadFromBuffer(bigramsBuffer);
-    disambiguator = new Disambiguator(lemmatizer, bigrams);
+    disambiguator = new Disambiguator(lemmatizer, lemmatizer);
   });
 
   describe("Wildly different word forms → same lemma", () => {
@@ -174,7 +163,7 @@ describe("A-Ha! Icelandic Morphology", () => {
     it("document about horses should be findable by 'hestur'", () => {
       // A document containing: "Ég sá hestinn í túninu. Hestarnir voru fallegir."
       const doc = "Ég sá hestinn í túninu. Hestarnir voru fallegir.";
-      const lemmas = extractLemmas(doc, lemmatizer);
+      const lemmas = extractIndexableLemmas(doc, lemmatizer, { bigrams: lemmatizer });
 
       // User searches for "hestur" - should match!
       expect(lemmas.has("hestur")).toBe(true);
@@ -183,7 +172,7 @@ describe("A-Ha! Icelandic Morphology", () => {
     it("document about children should be findable by 'barn'", () => {
       // "Börnin léku sér úti. Við sáum mörg börn."
       const doc = "Börnin léku sér úti. Við sáum mörg börn.";
-      const lemmas = extractLemmas(doc, lemmatizer);
+      const lemmas = extractIndexableLemmas(doc, lemmatizer, { bigrams: lemmatizer });
 
       expect(lemmas.has("barn")).toBe(true);
     });
@@ -191,7 +180,7 @@ describe("A-Ha! Icelandic Morphology", () => {
     it("document about going somewhere should match 'fara'", () => {
       // "Við fórum til Akureyrar. Þeir fara á morgun."
       const doc = "Við fórum til Akureyrar. Þeir fara á morgun.";
-      const lemmas = extractLemmas(doc, lemmatizer);
+      const lemmas = extractIndexableLemmas(doc, lemmatizer, { bigrams: lemmatizer });
 
       expect(lemmas.has("fara")).toBe(true);
     });
@@ -199,7 +188,7 @@ describe("A-Ha! Icelandic Morphology", () => {
     it("document with 'kvenna' should match search for 'kona'", () => {
       // "Þetta er barátta kvenna fyrir jafnrétti."
       const doc = "Þetta er barátta kvenna fyrir jafnrétti.";
-      const lemmas = extractLemmas(doc, lemmatizer);
+      const lemmas = extractIndexableLemmas(doc, lemmatizer, { bigrams: lemmatizer });
 
       expect(lemmas.has("kona")).toBe(true);
     });
@@ -297,7 +286,7 @@ describe("A-Ha! Icelandic Morphology", () => {
       // Article mentions "þingmenn" (MPs, plural)
       const article =
         "Þingmenn ræddu frumvarpið í gær. Þingmaðurinn sagði...";
-      const lemmas = extractLemmas(article, lemmatizer);
+      const lemmas = extractIndexableLemmas(article, lemmatizer, { bigrams: lemmatizer });
 
       // Search for "þingmaður" should find this
       expect(lemmas.has("þingmaður")).toBe(true);
@@ -306,7 +295,7 @@ describe("A-Ha! Icelandic Morphology", () => {
     it("recipe mentioning ingredients in various cases", () => {
       // "Bætið eggjunum í deigið. Notið þrjú egg."
       const recipe = "Bætið eggjunum í deigið. Notið þrjú egg.";
-      const lemmas = extractLemmas(recipe, lemmatizer);
+      const lemmas = extractIndexableLemmas(recipe, lemmatizer, { bigrams: lemmatizer });
 
       expect(lemmas.has("egg")).toBe(true);
       expect(lemmas.has("deig")).toBe(true);
@@ -315,7 +304,7 @@ describe("A-Ha! Icelandic Morphology", () => {
     it("job posting should be findable by occupation", () => {
       // "Við leitum að reyndum kennurum"
       const posting = "Við leitum að reyndum kennurum til starfa.";
-      const lemmas = extractLemmas(posting, lemmatizer);
+      const lemmas = extractIndexableLemmas(posting, lemmatizer, { bigrams: lemmatizer });
 
       // Search for "kennari" should match
       expect(lemmas.has("kennari")).toBe(true);
@@ -324,22 +313,18 @@ describe("A-Ha! Icelandic Morphology", () => {
 });
 
 describe("Compound word indexing", () => {
-  let lemmatizer: Lemmatizer;
+  let lemmatizer: BinaryLemmatizer;
   let splitter: CompoundSplitter;
   let knownLemmas: Set<string>;
 
   beforeAll(() => {
     const dataDir = join(import.meta.dirname, "..", "data-dist");
-    const lemmasBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lemmas.txt.gz"))
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     );
-    const lookupBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lookup.tsv.gz"))
-    );
-    lemmatizer = Lemmatizer.loadFromBuffers(lemmasBuffer, lookupBuffer);
 
-    const lemmasText = lemmasBuffer.toString("utf-8");
-    const lemmasList = lemmasText.split("\n").filter((l) => l.length > 0);
+    const lemmasList = lemmatizer.getAllLemmas();
     knownLemmas = createKnownLemmaSet(lemmasList);
     splitter = new CompoundSplitter(lemmatizer, knownLemmas);
   });
@@ -426,17 +411,14 @@ describe("Compound word indexing", () => {
 });
 
 describe("Edge cases and gotchas", () => {
-  let lemmatizer: Lemmatizer;
+  let lemmatizer: BinaryLemmatizer;
 
   beforeAll(() => {
     const dataDir = join(import.meta.dirname, "..", "data-dist");
-    const lemmasBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lemmas.txt.gz"))
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     );
-    const lookupBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lookup.tsv.gz"))
-    );
-    lemmatizer = Lemmatizer.loadFromBuffers(lemmasBuffer, lookupBuffer);
   });
 
   it("handles capitalized words (proper nouns vs sentence start)", () => {

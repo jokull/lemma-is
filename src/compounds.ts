@@ -28,7 +28,10 @@ export interface CompoundSplit {
 }
 
 export interface CompoundSplitterOptions {
-  /** Minimum part length */
+  /**
+   * Minimum part length.
+   * Default: 3. Set to 2 for more aggressive splitting (e.g., "ís" in "ísland").
+   */
   minPartLength?: number;
   /** Try removing linking letters (s, u, a) */
   tryLinkingLetters?: boolean;

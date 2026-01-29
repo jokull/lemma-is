@@ -11,18 +11,14 @@
  * 4. Fall back to first lemma if no frequency data available
  */
 
-import { BigramLookup } from "./bigrams.js";
-import { UnigramLookup } from "./unigrams.js";
 import { STOPWORDS_IS } from "./stopwords.js";
-import type { LemmatizerLike } from "./types.js";
+import type { LemmatizerLike, BigramProvider } from "./types.js";
 
 export interface DisambiguatorOptions {
   /** Weight for left context (previous word) */
   leftWeight?: number;
   /** Weight for right context (next word) */
   rightWeight?: number;
-  /** Unigram lookup for fallback scoring */
-  unigrams?: UnigramLookup;
 }
 
 export interface DisambiguatedToken {
@@ -39,23 +35,21 @@ export interface DisambiguatedToken {
 }
 
 /**
- * Disambiguate lemmas using bigram context and unigram fallback.
+ * Disambiguate lemmas using bigram context.
  */
 export class Disambiguator {
   private lemmatizer: LemmatizerLike;
-  private bigrams: BigramLookup;
-  private unigrams: UnigramLookup | null;
+  private bigrams: BigramProvider;
   private leftWeight: number;
   private rightWeight: number;
 
   constructor(
     lemmatizer: LemmatizerLike,
-    bigrams: BigramLookup,
+    bigrams: BigramProvider,
     options: DisambiguatorOptions = {}
   ) {
     this.lemmatizer = lemmatizer;
     this.bigrams = bigrams;
-    this.unigrams = options.unigrams ?? null;
     this.leftWeight = options.leftWeight ?? 1.0;
     this.rightWeight = options.rightWeight ?? 1.0;
   }
@@ -87,7 +81,7 @@ export class Disambiguator {
     }
 
     // Score each candidate
-    const scores: { lemma: string; bigramScore: number; unigramScore: number }[] = [];
+    const scores: { lemma: string; bigramScore: number }[] = [];
 
     for (const lemma of candidates) {
       let bigramScore = 0;
@@ -114,23 +108,11 @@ export class Disambiguator {
         }
       }
 
-      // Unigram fallback score
-      const unigramScore = this.unigrams
-        ? Math.log(this.unigrams.freq(lemma) + 1)
-        : 0;
-
-      scores.push({ lemma, bigramScore, unigramScore });
+      scores.push({ lemma, bigramScore });
     }
 
-    // Sort by bigram score first, then unigram score as tiebreaker
-    scores.sort((a, b) => {
-      // Primary: bigram score
-      if (a.bigramScore !== b.bigramScore) {
-        return b.bigramScore - a.bigramScore;
-      }
-      // Secondary: unigram score
-      return b.unigramScore - a.unigramScore;
-    });
+    // Sort by bigram score (descending)
+    scores.sort((a, b) => b.bigramScore - a.bigramScore);
 
     // Check if we had any bigram evidence
     const hasBigramEvidence = scores[0].bigramScore > 0;
@@ -142,14 +124,6 @@ export class Disambiguator {
       const topScore = scores[0].bigramScore;
       const totalScore = scores.reduce((sum, s) => sum + Math.exp(s.bigramScore), 0);
       confidence = totalScore > 0 ? Math.exp(topScore) / totalScore : 1 / candidates.length;
-    } else if (this.unigrams && scores[0].unigramScore > 0) {
-      // Medium confidence when relying on unigrams
-      const topScore = scores[0].unigramScore;
-      const totalScore = scores.reduce((sum, s) => sum + Math.exp(s.unigramScore), 0);
-      confidence = Math.min(
-        0.7, // Cap unigram-only confidence
-        totalScore > 0 ? Math.exp(topScore) / totalScore : 1 / candidates.length
-      );
     } else {
       // Low confidence when no frequency data
       confidence = 1 / candidates.length;
@@ -208,14 +182,13 @@ export class Disambiguator {
 export function extractDisambiguatedLemmas(
   text: string,
   lemmatizer: LemmatizerLike,
-  bigrams: BigramLookup,
+  bigrams: BigramProvider,
   options: {
     tokenize?: (text: string) => string[];
     removeStopwords?: boolean;
-    unigrams?: UnigramLookup;
   } = {}
 ): Set<string> {
-  const { tokenize, removeStopwords, unigrams } = options;
+  const { tokenize, removeStopwords } = options;
 
   // Tokenize
   const tokens = tokenize
@@ -227,7 +200,7 @@ export function extractDisambiguatedLemmas(
         .filter((t) => t.length > 0);
 
   // Disambiguate
-  const disambiguator = new Disambiguator(lemmatizer, bigrams, { unigrams });
+  const disambiguator = new Disambiguator(lemmatizer, bigrams);
   const lemmas = disambiguator.extractLemmas(tokens);
 
   // Filter stopwords if requested

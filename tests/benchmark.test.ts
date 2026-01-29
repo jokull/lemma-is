@@ -6,12 +6,9 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "fs";
-import { gunzipSync } from "zlib";
 import { join } from "path";
 import {
-  Lemmatizer,
-  BigramLookup,
-  UnigramLookup,
+  BinaryLemmatizer,
   CompoundSplitter,
   createKnownLemmaSet,
 } from "../src/index.js";
@@ -49,38 +46,18 @@ komu með fuglana og stukku þeim beint til hennar.`,
 };
 
 describe("Processing Pipeline", () => {
-  let lemmatizer: Lemmatizer;
-  let bigrams: BigramLookup;
-  let unigrams: UnigramLookup;
+  let lemmatizer: BinaryLemmatizer;
   let compoundSplitter: CompoundSplitter;
 
   beforeAll(() => {
     const dataDir = join(import.meta.dirname, "..", "data-dist");
-
-    // Load lemmatizer
-    const lemmasBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lemmas.txt.gz"))
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     );
-    const lookupBuffer = gunzipSync(
-      readFileSync(join(dataDir, "lookup.tsv.gz"))
-    );
-    lemmatizer = Lemmatizer.loadFromBuffers(lemmasBuffer, lookupBuffer);
-
-    // Load bigrams
-    const bigramsBuffer = gunzipSync(
-      readFileSync(join(dataDir, "bigrams.json.gz"))
-    );
-    bigrams = BigramLookup.loadFromBuffer(bigramsBuffer);
-
-    // Load unigrams
-    const unigramsBuffer = gunzipSync(
-      readFileSync(join(dataDir, "unigrams.json.gz"))
-    );
-    unigrams = UnigramLookup.loadFromBuffer(unigramsBuffer);
 
     // Create compound splitter with lemmas list
-    const lemmasText = lemmasBuffer.toString("utf-8");
-    const lemmasList = lemmasText.split("\n").filter((l) => l.length > 0);
+    const lemmasList = lemmatizer.getAllLemmas();
     const knownLemmas = createKnownLemmaSet(lemmasList);
     compoundSplitter = new CompoundSplitter(lemmatizer, knownLemmas, {
       minPartLength: 3,
@@ -123,7 +100,7 @@ describe("Processing Pipeline", () => {
       const processed = processText(
         "Við erum að fara",
         lemmatizer,
-        { bigrams, unigrams }
+        { bigrams: lemmatizer }
       );
 
       const vid = processed.find((p) => p.original.toLowerCase() === "við");
@@ -137,7 +114,7 @@ describe("Processing Pipeline", () => {
       const lemmas = extractIndexableLemmas(
         PARAGRAPHS.CONVERSATIONAL,
         lemmatizer,
-        { bigrams, unigrams }
+        { bigrams: lemmatizer }
       );
 
       expect(lemmas.size).toBeGreaterThan(5);
@@ -149,13 +126,13 @@ describe("Processing Pipeline", () => {
       const withStopwords = extractIndexableLemmas(
         "Við fórum í bíó",
         lemmatizer,
-        { bigrams, unigrams, removeStopwords: false }
+        { bigrams: lemmatizer, removeStopwords: false }
       );
 
       const withoutStopwords = extractIndexableLemmas(
         "Við fórum í bíó",
         lemmatizer,
-        { bigrams, unigrams, removeStopwords: true }
+        { bigrams: lemmatizer, removeStopwords: true }
       );
 
       // Should have fewer lemmas without stopwords
@@ -179,8 +156,7 @@ describe("Processing Pipeline", () => {
 
           for (const strategy of strategies) {
             results[strategy] = runBenchmark(text, lemmatizer, strategy, {
-              bigrams,
-              unigrams,
+              bigrams: lemmatizer,
               compoundSplitter,
             });
           }
@@ -199,8 +175,7 @@ describe("Processing Pipeline", () => {
 
         it(`${domain} metrics snapshot`, () => {
           const metrics = runBenchmark(text, lemmatizer, "full", {
-            bigrams,
-            unigrams,
+            bigrams: lemmatizer,
             compoundSplitter,
           });
 
@@ -225,7 +200,7 @@ describe("Processing Pipeline", () => {
         PARAGRAPHS.CONVERSATIONAL,
         lemmatizer,
         "full",
-        { bigrams, unigrams, compoundSplitter }
+        { bigrams: lemmatizer, compoundSplitter }
       );
 
       expect(metrics.coverage).toBeGreaterThan(0.85);
@@ -234,8 +209,7 @@ describe("Processing Pipeline", () => {
     it("should achieve >70% coverage on all paragraphs", () => {
       for (const [domain, text] of Object.entries(PARAGRAPHS)) {
         const metrics = runBenchmark(text, lemmatizer, "full", {
-          bigrams,
-          unigrams,
+          bigrams: lemmatizer,
           compoundSplitter,
         });
 
@@ -251,8 +225,7 @@ describe("Processing Pipeline", () => {
     it("should process paragraphs in <50ms", () => {
       for (const [domain, text] of Object.entries(PARAGRAPHS)) {
         const metrics = runBenchmark(text, lemmatizer, "full", {
-          bigrams,
-          unigrams,
+          bigrams: lemmatizer,
           compoundSplitter,
         });
 
@@ -268,8 +241,7 @@ describe("Processing Pipeline", () => {
     it("should show improvement from naive to full strategy", () => {
       const naive = runBenchmark(PARAGRAPHS.NEWS, lemmatizer, "naive");
       const full = runBenchmark(PARAGRAPHS.NEWS, lemmatizer, "full", {
-        bigrams,
-        unigrams,
+        bigrams: lemmatizer,
         compoundSplitter,
       });
 
@@ -283,8 +255,7 @@ describe("Processing Pipeline", () => {
 
       const naive = runBenchmark(compoundText, lemmatizer, "naive");
       const full = runBenchmark(compoundText, lemmatizer, "full", {
-        bigrams,
-        unigrams,
+        bigrams: lemmatizer,
         compoundSplitter,
       });
 
