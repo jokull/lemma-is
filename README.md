@@ -14,6 +14,45 @@ Existing Icelandic NLP tools don't run in browsers:
 
 lemma-is trades parsing accuracy for portability—good enough for search, runs anywhere JavaScript runs.
 
+## Quickstart
+
+```bash
+npm install lemma-is
+```
+
+**Get the data** (~102 MB binary):
+```bash
+# Option 1: Download pre-built from npm
+cp node_modules/lemma-is/data-dist/lemma-is.bin ./public/
+
+# Option 2: Build from source (requires BÍN data + Python)
+# Download SHsnid.csv from https://bin.arnastofnun.is/DMII/LTdata/k-LTdata/
+uv run python scripts/build-data.py && uv run python scripts/build-binary.py
+```
+
+**Browser (Web Worker)** — see [`test.html`](test.html) for a complete example:
+```typescript
+// Load in worker to avoid blocking main thread
+const lemmatizer = await BinaryLemmatizer.load("/data/lemma-is.bin");
+self.postMessage({ lemmas: lemmatizer.lemmatize("börnin") }); // → ["barn"]
+```
+
+**Node.js endpoint**:
+```typescript
+import { readFileSync } from "fs";
+import { BinaryLemmatizer, extractIndexableLemmas } from "lemma-is";
+
+const buffer = readFileSync("./lemma-is.bin");
+const lemmatizer = BinaryLemmatizer.loadFromBuffer(buffer.buffer.slice(
+  buffer.byteOffset, buffer.byteOffset + buffer.byteLength
+));
+
+app.post("/lemmatize", (req, res) => {
+  const lemmas = extractIndexableLemmas(req.body.text, lemmatizer);
+  res.json({ lemmas: [...lemmas] });
+});
+```
+
 ## The Problem
 
 Icelandic is highly inflected. A single word appears in dozens of forms:
