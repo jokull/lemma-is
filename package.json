@@ -1,6 +1,6 @@
 {
   "name": "lemma-is",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Icelandic word form to lemma lookup for browser and Node.js",
   "keywords": [
     "icelandic",

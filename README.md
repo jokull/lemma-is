@@ -25,15 +25,18 @@ npm install lemma-is
 import { readFileSync } from "fs";
 import { BinaryLemmatizer, extractIndexableLemmas } from "lemma-is";
 
-const buffer = readFileSync("./lemma-is.bin");
-const lemmatizer = BinaryLemmatizer.loadFromBuffer(buffer.buffer.slice(
-  buffer.byteOffset, buffer.byteOffset + buffer.byteLength
-));
+// Binary data is bundled with the package
+const buffer = readFileSync("node_modules/lemma-is/data-dist/lemma-is.bin");
+const lemmatizer = BinaryLemmatizer.loadFromBuffer(
+  buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+);
 
-app.post("/lemmatize", (req, res) => {
-  const lemmas = extractIndexableLemmas(req.body.text, lemmatizer);
-  res.json({ lemmas: [...lemmas] });
-});
+lemmatizer.lemmatize("börnin");  // → ["barn"]
+lemmatizer.lemmatize("fóru");    // → ["fara", "fóra"]
+
+// Full pipeline for search indexing
+const lemmas = extractIndexableLemmas("Börnin fóru í bíó", lemmatizer);
+// → ["barn", "fara", "fóra", "í", "bíó"]
 ```
 
 ## The Problem
@@ -52,10 +55,6 @@ If you index "Börnin fóru í bíó" by splitting on whitespace, a search for "
 ## Solution
 
 ```typescript
-import { BinaryLemmatizer } from "lemma-is";
-
-const lemmatizer = await BinaryLemmatizer.load("/data/lemma-is.bin");
-
 lemmatizer.lemmatize("börnin");   // → ["barn"]
 lemmatizer.lemmatize("fóru");     // → ["fara"]
 lemmatizer.lemmatize("kvenna");   // → ["kona"]
@@ -86,9 +85,9 @@ lemmatizer.lemmatize("við");
 The library uses shallow grammar rules based on Icelandic case government to disambiguate prepositions:
 
 ```typescript
-import { BinaryLemmatizer, Disambiguator } from "lemma-is";
+import { Disambiguator } from "lemma-is";
 
-const lemmatizer = await BinaryLemmatizer.load("/data/lemma-is.bin");
+// lemmatizer loaded as shown in Quickstart
 const disambiguator = new Disambiguator(lemmatizer, lemmatizer, { useGrammarRules: true });
 
 // "á borðinu" - borðinu is dative (þgf), á governs dative → preposition
@@ -139,9 +138,7 @@ lemmatizer.lemmatizeWithMorph("börnum");
 Use corpus frequencies to pick the most likely lemma based on context:
 
 ```typescript
-import { BinaryLemmatizer, processText } from "lemma-is";
-
-const lemmatizer = await BinaryLemmatizer.load("/data/lemma-is.bin");
+import { processText } from "lemma-is";
 
 // BinaryLemmatizer has built-in bigram frequencies for disambiguation
 // "við erum" = "we are" → bigrams favor pronoun "ég" over preposition
@@ -271,6 +268,7 @@ const lemmas = extractIndexableLemmas(text, lemmatizer, {
 ### Setup
 
 ```typescript
+import { readFileSync } from "fs";
 import {
   BinaryLemmatizer,
   extractIndexableLemmas,
@@ -278,7 +276,10 @@ import {
   createKnownLemmaSet
 } from "lemma-is";
 
-const lemmatizer = await BinaryLemmatizer.load("/data/lemma-is.bin");
+const buffer = readFileSync("node_modules/lemma-is/data-dist/lemma-is.bin");
+const lemmatizer = BinaryLemmatizer.loadFromBuffer(
+  buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+);
 const knownLemmas = createKnownLemmaSet(lemmatizer.getAllLemmas());
 const splitter = new CompoundSplitter(lemmatizer, knownLemmas);
 ```
@@ -366,7 +367,7 @@ uv run python scripts/build-binary.py    # builds lemma-is.bin with morph featur
 import { readFileSync } from "fs";
 import { BinaryLemmatizer } from "lemma-is";
 
-const buffer = readFileSync("data-dist/lemma-is.bin");
+const buffer = readFileSync("node_modules/lemma-is/data-dist/lemma-is.bin");
 const lemmatizer = BinaryLemmatizer.loadFromBuffer(
   buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
 );
