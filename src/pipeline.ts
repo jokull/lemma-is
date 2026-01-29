@@ -8,7 +8,7 @@
 import { tokenize, type Token } from "tokenize-is";
 import { Disambiguator, type DisambiguatedToken } from "./disambiguate.js";
 import { CompoundSplitter, type CompoundSplit } from "./compounds.js";
-import { STOPWORDS_IS } from "./stopwords.js";
+import { STOPWORDS_IS, isContextualStopword } from "./stopwords.js";
 import type { LemmatizerLike, BigramProvider } from "./types.js";
 
 /**
@@ -62,6 +62,13 @@ export interface ProcessOptions {
   compoundSplitter?: CompoundSplitter;
   /** Remove stopwords from results */
   removeStopwords?: boolean;
+  /**
+   * Use contextual stopword detection (requires POS info).
+   * When true, words like "á" are only filtered as stopwords when used
+   * as prepositions, not when used as verbs ("eiga") or nouns (river).
+   * Default: false (use simple stopword list)
+   */
+  useContextualStopwords?: boolean;
   /** Include numbers in results */
   includeNumbers?: boolean;
   /**
@@ -224,10 +231,26 @@ export function extractIndexableLemmas(
   lemmatizer: LemmatizerLike,
   options: ProcessOptions = {}
 ): Set<string> {
-  const { removeStopwords = false, indexAllCandidates = true } = options;
+  const {
+    removeStopwords = false,
+    indexAllCandidates = true,
+    useContextualStopwords = false,
+  } = options;
 
   const processed = processText(text, lemmatizer, options);
   const lemmas = new Set<string>();
+
+  /**
+   * Check if a lemma should be filtered as a stopword.
+   * Uses contextual rules when enabled and POS is available.
+   */
+  const shouldFilter = (lemma: string, pos?: string): boolean => {
+    if (!removeStopwords) return false;
+    if (useContextualStopwords) {
+      return isContextualStopword(lemma, pos);
+    }
+    return STOPWORDS_IS.has(lemma);
+  };
 
   for (const token of processed) {
     // Skip entities
@@ -238,14 +261,16 @@ export function extractIndexableLemmas(
     if (indexAllCandidates) {
       // Index ALL candidate lemmas for better search recall
       for (const lemma of token.lemmas) {
-        if (!removeStopwords || !STOPWORDS_IS.has(lemma)) {
+        if (!shouldFilter(lemma)) {
           lemmas.add(lemma);
         }
       }
     } else {
       // Use disambiguated lemma if available (better precision)
       if (token.disambiguated) {
-        if (!removeStopwords || !STOPWORDS_IS.has(token.disambiguated)) {
+        // Note: We don't have POS info easily available in disambiguated result
+        // This would need enhancement to pass through POS from disambiguation
+        if (!shouldFilter(token.disambiguated)) {
           lemmas.add(token.disambiguated);
         }
       }
@@ -256,7 +281,7 @@ export function extractIndexableLemmas(
       for (const part of token.compoundSplit.parts) {
         const partLemmas = lemmatizer.lemmatize(part);
         for (const lemma of partLemmas) {
-          if (!removeStopwords || !STOPWORDS_IS.has(lemma)) {
+          if (!shouldFilter(lemma)) {
             lemmas.add(lemma);
           }
         }

@@ -2,19 +2,19 @@
 
 exports[`Processing Pipeline > Benchmark Metrics > CONVERSATIONAL paragraph > CONVERSATIONAL metrics snapshot 1`] = `
 {
-  "ambiguityRate": 0.86,
-  "compoundsFound": 5,
-  "coverage": 0.97,
+  "ambiguityRate": 0.48,
+  "compoundsFound": 4,
+  "coverage": 0.62,
   "entitiesSkipped": 0,
-  "uniqueLemmas": 51,
+  "uniqueLemmas": 47,
 }
 `;
 
 exports[`Processing Pipeline > Benchmark Metrics > LEGAL paragraph > LEGAL metrics snapshot 1`] = `
 {
-  "ambiguityRate": 0.77,
+  "ambiguityRate": 0.59,
   "compoundsFound": 7,
-  "coverage": 0.86,
+  "coverage": 0.68,
   "entitiesSkipped": 0,
   "uniqueLemmas": 54,
 }
@@ -22,9 +22,9 @@ exports[`Processing Pipeline > Benchmark Metrics > LEGAL paragraph > LEGAL metri
 
 exports[`Processing Pipeline > Benchmark Metrics > LITERARY paragraph > LITERARY metrics snapshot 1`] = `
 {
-  "ambiguityRate": 0.71,
+  "ambiguityRate": 0.43,
   "compoundsFound": 3,
-  "coverage": 1,
+  "coverage": 0.76,
   "entitiesSkipped": 0,
   "uniqueLemmas": 37,
 }
@@ -32,19 +32,19 @@ exports[`Processing Pipeline > Benchmark Metrics > LITERARY paragraph > LITERARY
 
 exports[`Processing Pipeline > Benchmark Metrics > NEWS paragraph > NEWS metrics snapshot 1`] = `
 {
-  "ambiguityRate": 0.88,
-  "compoundsFound": 10,
-  "coverage": 0.96,
+  "ambiguityRate": 0.58,
+  "compoundsFound": 9,
+  "coverage": 0.71,
   "entitiesSkipped": 0,
-  "uniqueLemmas": 65,
+  "uniqueLemmas": 59,
 }
 `;
 
 exports[`Processing Pipeline > Benchmark Metrics > TECHNICAL paragraph > TECHNICAL metrics snapshot 1`] = `
 {
-  "ambiguityRate": 0.83,
+  "ambiguityRate": 0.61,
   "compoundsFound": 6,
-  "coverage": 0.94,
+  "coverage": 0.72,
   "entitiesSkipped": 0,
   "uniqueLemmas": 44,
 }

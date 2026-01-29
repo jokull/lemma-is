@@ -1,6 +1,18 @@
-import { STOPWORDS_IS, isStopword, removeStopwords } from "./stopwords.js";
+import {
+  STOPWORDS_IS,
+  isStopword,
+  removeStopwords,
+  isContextualStopword,
+  CONTEXTUAL_STOPWORDS,
+} from "./stopwords.js";
 
-export { STOPWORDS_IS, isStopword, removeStopwords };
+export {
+  STOPWORDS_IS,
+  isStopword,
+  removeStopwords,
+  isContextualStopword,
+  CONTEXTUAL_STOPWORDS,
+};
 export {
   BinaryLemmatizer,
   type BinaryLemmatizerOptions,
@@ -12,19 +24,56 @@ export {
   type DisambiguatorOptions,
   type DisambiguatedToken,
 } from "./disambiguate.js";
+export {
+  DISAMBIGUATION_RULES,
+  getRulesForWord,
+  hasDisambiguationRules,
+  type DisambiguationRule,
+} from "./disambiguation-rules.js";
+export {
+  PREPOSITION_CASES,
+  NOMINATIVE_PRONOUNS,
+  applyGrammarRules,
+  applyPrepositionRule,
+  applyPronounVerbRule,
+  canGovernCase,
+  isKnownPreposition,
+  getGovernedCases,
+  type GrammarRuleMatch,
+} from "./mini-grammar.js";
 export type {
   LemmatizerLike,
   LemmaWithPOS,
+  LemmaWithMorph,
   WordClass,
   BigramProvider,
+  MorphFeatures,
+  GrammaticalCase,
+  GrammaticalGender,
+  GrammaticalNumber,
 } from "./types.js";
-export { WORD_CLASS_NAMES, WORD_CLASS_NAMES_IS } from "./types.js";
+export {
+  WORD_CLASS_NAMES,
+  WORD_CLASS_NAMES_IS,
+  CASE_NAMES,
+  GENDER_NAMES,
+  NUMBER_NAMES,
+} from "./types.js";
 export {
   CompoundSplitter,
   createKnownLemmaSet,
+  PROTECTED_LEMMAS,
   type CompoundSplit,
   type CompoundSplitterOptions,
+  type CompoundSplitMode,
 } from "./compounds.js";
+export {
+  STATIC_PHRASES,
+  matchPhrase,
+  isKnownPhrase,
+  getPhraseInfo,
+  type StaticPhrase,
+} from "./phrases.js";
 export {
   processText,
   extractIndexableLemmas,

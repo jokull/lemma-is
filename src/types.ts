@@ -54,11 +54,69 @@ export const WORD_CLASS_NAMES_IS: Record<WordClass, string> = {
 };
 
 /**
+ * Grammatical case (fall) in Icelandic.
+ */
+export type GrammaticalCase = "nf" | "þf" | "þgf" | "ef";
+
+/**
+ * Grammatical gender (kyn) in Icelandic.
+ */
+export type GrammaticalGender = "kk" | "kvk" | "hk";
+
+/**
+ * Grammatical number (tala) in Icelandic.
+ */
+export type GrammaticalNumber = "et" | "ft";
+
+/**
+ * Human-readable names for cases.
+ */
+export const CASE_NAMES: Record<GrammaticalCase, string> = {
+  nf: "nominative",
+  þf: "accusative",
+  þgf: "dative",
+  ef: "genitive",
+};
+
+/**
+ * Human-readable names for genders.
+ */
+export const GENDER_NAMES: Record<GrammaticalGender, string> = {
+  kk: "masculine",
+  kvk: "feminine",
+  hk: "neuter",
+};
+
+/**
+ * Human-readable names for numbers.
+ */
+export const NUMBER_NAMES: Record<GrammaticalNumber, string> = {
+  et: "singular",
+  ft: "plural",
+};
+
+/**
+ * Morphological features extracted from BÍN.
+ */
+export interface MorphFeatures {
+  case?: GrammaticalCase;
+  gender?: GrammaticalGender;
+  number?: GrammaticalNumber;
+}
+
+/**
  * A lemma with its word class.
  */
 export interface LemmaWithPOS {
   lemma: string;
   pos: WordClass;
+}
+
+/**
+ * A lemma with word class and morphological features.
+ */
+export interface LemmaWithMorph extends LemmaWithPOS {
+  morph?: MorphFeatures;
 }
 
 /**

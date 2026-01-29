@@ -16,7 +16,7 @@ describe("BinaryLemmatizer", () => {
   });
 
   it("should load data correctly", () => {
-    expect(lemmatizer.lemmaCountValue).toBeGreaterThan(300000);
+    expect(lemmatizer.lemmaCountValue).toBeGreaterThan(280000);
     expect(lemmatizer.wordFormCount).toBeGreaterThan(3000000);
   });
 

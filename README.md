@@ -20,7 +20,7 @@ lemma-is trades parsing accuracy for portability—good enough for search, runs 
 npm install lemma-is
 ```
 
-**Get the data** (~102 MB binary):
+**Get the data** (~91 MB binary):
 ```bash
 # Option 1: Download pre-built from npm
 cp node_modules/lemma-is/data-dist/lemma-is.bin ./public/
@@ -98,6 +98,59 @@ lemmatizer.lemmatize("við");
 // "við" = noun "wood" (from "viður")
 ```
 
+### Grammar Rules (Case Government)
+
+The library uses shallow grammar rules based on Icelandic case government to disambiguate prepositions:
+
+```typescript
+import { BinaryLemmatizer, Disambiguator } from "lemma-is";
+
+const lemmatizer = await BinaryLemmatizer.load("/data/lemma-is.bin");
+const disambiguator = new Disambiguator(lemmatizer, lemmatizer, { useGrammarRules: true });
+
+// "á borðinu" - borðinu is dative (þgf), á governs dative → preposition
+disambiguator.disambiguate("á", null, "borðinu");
+// → { lemma: "á", pos: "fs", resolvedBy: "grammar_rules" }
+
+// "ég á" - pronoun before á → likely verb "eiga"
+disambiguator.disambiguate("á", "ég", null);
+// → { lemma: "eiga", pos: "so", resolvedBy: "preference_rules" }
+```
+
+### Morphological Features
+
+The binary includes case, gender, and number for each word form:
+
+```typescript
+lemmatizer.lemmatizeWithMorph("hestinum");
+// → [{
+//   lemma: "hestur",
+//   pos: "no",
+//   morph: { case: "þgf", gender: "kk", number: "et" }
+// }]
+// "hestinum" = dative, masculine, singular
+
+lemmatizer.lemmatizeWithMorph("börnum");
+// → [{
+//   lemma: "barn",
+//   pos: "no",
+//   morph: { case: "þgf", gender: "hk", number: "ft" }
+// }]
+// "börnum" = dative, neuter, plural
+```
+
+| Code | Meaning |
+|------|---------|
+| `nf` | nominative (nefnifall) |
+| `þf` | accusative (þolfall) |
+| `þgf` | dative (þágufall) |
+| `ef` | genitive (eignarfall) |
+| `kk` | masculine (karlkyn) |
+| `kvk` | feminine (kvenkyn) |
+| `hk` | neuter (hvorugkyn) |
+| `et` | singular (eintala) |
+| `ft` | plural (fleirtala) |
+
 ### Bigram Disambiguation
 
 Use corpus frequencies to pick the most likely lemma based on context:
@@ -154,7 +207,85 @@ A document mentioning "bílstjóri" is now findable by searching for "bíll" (ca
 
 ## Full Pipeline
 
-For production indexing, combine tokenization, lemmatization, disambiguation, and compound splitting:
+For production indexing, combine tokenization, lemmatization, disambiguation, and compound splitting.
+
+### What Gets Indexed
+
+Here's a real example showing exactly what lemmas are extracted:
+
+```typescript
+const text = "Ríkissjóður stendur í blóma ef 27 milljarða arðgreiðsla Íslandsbanka er talin með.";
+
+const lemmas = extractIndexableLemmas(text, lemmatizer, {
+  bigrams: lemmatizer,
+  compoundSplitter: splitter,
+  removeStopwords: true,
+});
+
+// Indexed lemmas:
+// ✓ ríkissjóður, ríki, sjóður     — compound + parts
+// ✓ standa                        — stendur → standa
+// ✓ blómi                         — í blóma → blómi
+// ✓ milljarður                    — milljarða → milljarður
+// ✓ arðgreiðsla, arður, greiðsla  — compound + parts
+// ✓ íslandsbanki                  — proper noun (lowercased)
+// ✓ telja                         — talin → telja
+//
+// NOT indexed (stopwords removed):
+// ✗ í, ef, er, með
+```
+
+A search for "sjóður" or "arður" now finds this document about the state treasury and bank dividends.
+
+### Another Example: Job Posting
+
+```typescript
+const posting = "Við leitum að reyndum kennurum til starfa í Reykjavík.";
+
+const lemmas = extractIndexableLemmas(posting, lemmatizer, {
+  bigrams: lemmatizer,
+  removeStopwords: true,
+});
+
+// Indexed:
+// ✓ leita, leit               — leitum → leita (+ noun variant)
+// ✓ reyndur, reynd            — reyndum → reyndur
+// ✓ kennari                   — kennurum → kennari
+// ✓ starf, starfa             — starfa (noun + verb)
+// ✓ reykjavík                 — place name (lowercased)
+//
+// NOT indexed:
+// ✗ við, að, til, í           — stopwords
+```
+
+A search for "kennari" finds this job posting even though the word "kennari" never appears—only "kennurum" (dative plural).
+
+### Complex Sentence
+
+```typescript
+const text = "Löngu áður en Jón borðaði ísinn sem hafði bráðnað hratt " +
+             "fór ég á veitingastaðinn og keypti mér rauðvín með hamborgaranum.";
+
+const lemmas = extractIndexableLemmas(text, lemmatizer, {
+  bigrams: lemmatizer,
+  compoundSplitter: splitter,
+  removeStopwords: true,
+});
+
+// Verbs (various tenses/persons):
+// ✓ borða      — borðaði (past)
+// ✓ bráðna     — bráðnað (past participle)
+// ✓ fara       — fór (past, different stem!)
+// ✓ kaupa      — keypti (past)
+//
+// Nouns with articles:
+// ✓ ís         — ísinn (NOT "Ísland"!)
+// ✓ veitingastaður, veiting, staður  — compound
+// ✓ rauðvín
+// ✓ hamborgari — hamborgaranum (dative + article)
+```
+
+### Setup
 
 ```typescript
 import {
@@ -167,17 +298,6 @@ import {
 const lemmatizer = await BinaryLemmatizer.load("/data/lemma-is.bin");
 const knownLemmas = createKnownLemmaSet(lemmatizer.getAllLemmas());
 const splitter = new CompoundSplitter(lemmatizer, knownLemmas);
-
-const text = "Landbúnaðarráðherra ræddi húsnæðislánareglur";
-
-// BinaryLemmatizer implements BigramProvider, so pass it for disambiguation
-const lemmas = extractIndexableLemmas(text, lemmatizer, {
-  bigrams: lemmatizer,
-  compoundSplitter: splitter,
-  removeStopwords: true,
-});
-// → Set { "landbúnaður", "ráðherra", "landbúnaðarráðherra",
-//         "ræða", "húsnæði", "lán", "regla", ... }
 ```
 
 ### Search-Optimized Defaults
@@ -238,23 +358,23 @@ lemmatizer.lemmatizeWithPOS("á");
 
 ## Data
 
-Single binary file: `lemma-is.bin` (~102 MB)
+Single binary file: `lemma-is.bin` (~91 MB)
 
 Contains:
-- 347K lemmas from BÍN
-- 3.7M word form mappings
+- 289K lemmas from BÍN
+- 3M word form mappings
 - 414K bigram frequencies
+- Morphological features (case, gender, number) per word form
 
-Uses ArrayBuffer with binary search for efficient memory usage.
+Uses ArrayBuffer with binary search for efficient memory usage. Format version 2 includes packed morphological data.
 
 ### Building Data
 
 ```bash
-# Download BÍN data from https://bin.arnastofnun.is/
-# Place SHsnid.csv in data/
+# Download BÍN data from https://bin.arnastofnun.is/DMII/LTdata/k-LTdata/
+# Extract SHsnid.csv to data/
 
-uv run python scripts/build-data.py      # builds lookup tables
-uv run python scripts/build-binary.py    # builds lemma-is.bin
+uv run python scripts/build-binary.py    # builds lemma-is.bin with morph features
 ```
 
 ## Node.js Usage
@@ -321,7 +441,7 @@ This library makes tradeoffs for portability. Know what you're getting.
 
 ### File Size
 
-The binary is **107 MB**. For serverless/edge with cold starts, that's significant. For browser apps, load in a Web Worker and cache aggressively.
+The binary is **~91 MB**. For serverless/edge with cold starts, that's significant. For browser apps, load in a Web Worker and cache aggressively.
 
 ```typescript
 // Cloudflare Workers: fits in 128MB memory limit, but cold starts are slow
@@ -406,14 +526,14 @@ splitter.split("landsins");
 
 ### Not a Parser
 
-This is a lookup table, not a grammatical parser. It doesn't understand:
+This is a lookup table with shallow grammar rules, not a full grammatical parser. It doesn't understand:
 
-- Sentence structure or syntax
-- Which reading is correct in context (beyond bigram hints)
+- Full sentence structure or syntax trees
+- Complex verb argument frames
 - Named entity recognition (people, places, companies)
 - Semantic meaning or word sense
 
-For applications needing grammatical analysis, use [GreynirEngine](https://github.com/mideind/GreynirEngine). lemma-is is for search indexing where "good enough" recall beats perfect precision.
+The grammar rules help with common patterns (preposition + case, pronoun + verb) but can't handle all disambiguation cases. For applications needing full grammatical analysis, use [GreynirEngine](https://github.com/mideind/GreynirEngine). lemma-is is for search indexing where "good enough" recall beats perfect precision.
 
 ## Development
 
@@ -431,9 +551,11 @@ Test files:
 - `binary-lemmatizer.test.ts` — Core lemmatization and bigram lookup
 - `compounds.test.ts` — Compound word splitting
 - `integration.test.ts` — Full pipeline, search indexing options
+- `pipeline-greynir.test.ts` — Full pipeline with Greynir test sentences
 - `benchmark.test.ts` — Performance and metrics snapshots
 - `icelandic-tricky.test.ts` — Edge cases, morphology examples
 - `limitations.test.ts` — Documented limitations and research notes
+- `mini-grammar.test.ts` — Grammar rules and case government
 
 ### Building
 

@@ -89,6 +89,71 @@ export function isStopword(word: string): boolean {
 }
 
 /**
+ * Contextual stopword rules for ambiguous words.
+ *
+ * Some words are stopwords in certain grammatical contexts but not others:
+ * - "á" as preposition (fs) or adverb (ao) = stopword
+ * - "á" as verb "eiga" (so) = NOT a stopword ("Ég á bíl")
+ * - "á" as noun "river" (no) = NOT a stopword ("við ána")
+ *
+ * Map: lemma -> Set of POS codes where it IS a stopword
+ */
+export const CONTEXTUAL_STOPWORDS: Map<string, Set<string>> = new Map([
+  // "á" - prep/adverb = stop, verb/noun = keep
+  ["á", new Set(["fs", "ao"])],
+  // "við" - prep = stop, pronoun "we" = stop, noun "viður" = keep
+  ["við", new Set(["fs", "fn"])],
+  // "af" - prep/adverb = stop
+  ["af", new Set(["fs", "ao"])],
+  // "til" - prep = stop
+  ["til", new Set(["fs"])],
+  // "um" - prep = stop
+  ["um", new Set(["fs"])],
+  // "frá" - prep = stop
+  ["frá", new Set(["fs"])],
+  // "yfir" - prep/adverb = stop
+  ["yfir", new Set(["fs", "ao"])],
+  // "undir" - prep/adverb = stop
+  ["undir", new Set(["fs", "ao"])],
+  // "fyrir" - prep/adverb = stop
+  ["fyrir", new Set(["fs", "ao"])],
+  // "eftir" - prep/adverb = stop
+  ["eftir", new Set(["fs", "ao"])],
+  // "gegn" - prep = stop
+  ["gegn", new Set(["fs"])],
+  // "hjá" - prep = stop
+  ["hjá", new Set(["fs"])],
+  // "úr" - prep = stop, noun "úr" (watch) = keep
+  ["úr", new Set(["fs"])],
+  // "í" - prep = stop
+  ["í", new Set(["fs"])],
+]);
+
+/**
+ * Check if a lemma is a stopword in a specific grammatical context.
+ *
+ * For ambiguous words, uses POS to determine stopword status.
+ * For unambiguous words, falls back to standard stopword check.
+ *
+ * @param lemma - The lemmatized word
+ * @param pos - Part of speech code (fs, ao, so, no, etc.)
+ * @returns true if the word should be treated as a stopword
+ */
+export function isContextualStopword(lemma: string, pos?: string): boolean {
+  const normalized = lemma.toLowerCase();
+
+  // Check if this lemma has context-dependent rules
+  const contextRule = CONTEXTUAL_STOPWORDS.get(normalized);
+  if (contextRule && pos) {
+    // Use the rule: stopword only if POS is in the stopword set
+    return contextRule.has(pos);
+  }
+
+  // Fall back to standard stopword check
+  return STOPWORDS_IS.has(normalized);
+}
+
+/**
  * Filter stopwords from an array of words/lemmas.
  */
 export function removeStopwords<T extends string>(words: T[]): T[] {

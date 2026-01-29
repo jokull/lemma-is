@@ -14,7 +14,17 @@
  * - Bigrams: word1/word2 offsets + lengths + frequencies (sorted)
  */
 
-import type { WordClass, LemmaWithPOS, LemmatizerLike, BigramProvider } from "./types.js";
+import type {
+  WordClass,
+  LemmaWithPOS,
+  LemmaWithMorph,
+  LemmatizerLike,
+  BigramProvider,
+  GrammaticalCase,
+  GrammaticalGender,
+  GrammaticalNumber,
+  MorphFeatures,
+} from "./types.js";
 
 const MAGIC = 0x4c454d41; // "LEMA"
 
@@ -30,6 +40,32 @@ const CODE_TO_POS: WordClass[] = [
   "to",
   "gr",
   "uh",
+];
+
+// Case code to string mapping (must match build-binary.py)
+// 0=none, 1=nf, 2=þf, 3=þgf, 4=ef
+const CODE_TO_CASE: (GrammaticalCase | undefined)[] = [
+  undefined, // 0 = none
+  "nf", // 1 = nominative
+  "þf", // 2 = accusative
+  "þgf", // 3 = dative
+  "ef", // 4 = genitive
+];
+
+// Gender code to string mapping (must match build-binary.py)
+// 0=none, 1=kk, 2=kvk, 3=hk
+const CODE_TO_GENDER: (GrammaticalGender | undefined)[] = [
+  undefined, // 0 = none
+  "kk", // 1 = masculine
+  "kvk", // 2 = feminine
+  "hk", // 3 = neuter
+];
+
+// Number code to string mapping (must match build-binary.py)
+// 0=et/none, 1=ft
+const CODE_TO_NUMBER: (GrammaticalNumber | undefined)[] = [
+  "et", // 0 = singular (or none)
+  "ft", // 1 = plural
 ];
 
 export interface BinaryLemmatizerOptions {
@@ -59,6 +95,7 @@ export class BinaryLemmatizer implements LemmatizerLike, BigramProvider {
   private wordCount: number;
   private entryCount: number;
   private bigramCount: number;
+  private version: number;
 
   private decoder = new TextDecoder("utf-8");
 
@@ -74,9 +111,9 @@ export class BinaryLemmatizer implements LemmatizerLike, BigramProvider {
       );
     }
 
-    const version = view.getUint32(4, true);
-    if (version !== 1) {
-      throw new Error(`Unsupported version: ${version}`);
+    this.version = view.getUint32(4, true);
+    if (this.version !== 1 && this.version !== 2) {
+      throw new Error(`Unsupported version: ${this.version}`);
     }
 
     const stringPoolSize = view.getUint32(8, true);
@@ -219,6 +256,7 @@ export class BinaryLemmatizer implements LemmatizerLike, BigramProvider {
   /**
    * Look up possible lemmas for a word form.
    * Results are sorted by corpus frequency (most common first).
+   * Duplicates are removed (same lemma with different morph features).
    */
   lemmatize(word: string, options: BinaryLemmatizeOptions = {}): string[] {
     const normalized = word.toLowerCase();
@@ -232,19 +270,22 @@ export class BinaryLemmatizer implements LemmatizerLike, BigramProvider {
     const end = this.entryOffsets[idx + 1];
 
     const { wordClass } = options;
+    const seen = new Set<string>();
     const result: string[] = [];
 
     for (let i = start; i < end; i++) {
-      const entry = this.entries[i];
-      const lemmaIdx = entry >>> 4;
-      const posCode = entry & 0xf;
+      const { lemmaIdx, posCode } = this.unpackEntry(this.entries[i]);
       const pos = CODE_TO_POS[posCode];
 
       if (wordClass && pos !== wordClass) {
         continue;
       }
 
-      result.push(this.getLemma(lemmaIdx));
+      const lemma = this.getLemma(lemmaIdx);
+      if (!seen.has(lemma)) {
+        seen.add(lemma);
+        result.push(lemma);
+      }
     }
 
     if (result.length === 0) {
@@ -255,7 +296,39 @@ export class BinaryLemmatizer implements LemmatizerLike, BigramProvider {
   }
 
   /**
+   * Unpack entry based on binary format version.
+   * Version 1: bits 0-3=pos, bits 4-23=lemmaIdx
+   * Version 2: bits 0-3=pos, bits 4-6=case, bits 7-8=gender, bit 9=number, bits 10-29=lemmaIdx
+   */
+  private unpackEntry(entry: number): {
+    lemmaIdx: number;
+    posCode: number;
+    caseCode: number;
+    genderCode: number;
+    numberCode: number;
+  } {
+    if (this.version === 1) {
+      return {
+        lemmaIdx: entry >>> 4,
+        posCode: entry & 0xf,
+        caseCode: 0,
+        genderCode: 0,
+        numberCode: 0,
+      };
+    }
+    // Version 2
+    return {
+      lemmaIdx: entry >>> 10,
+      posCode: entry & 0xf,
+      caseCode: (entry >>> 4) & 0x7,
+      genderCode: (entry >>> 7) & 0x3,
+      numberCode: (entry >>> 9) & 0x1,
+    };
+  }
+
+  /**
    * Look up lemmas with their word class (POS) tags.
+   * Duplicates are removed (same lemma+pos with different morph features).
    */
   lemmatizeWithPOS(word: string): LemmaWithPOS[] {
     const normalized = word.toLowerCase();
@@ -267,20 +340,75 @@ export class BinaryLemmatizer implements LemmatizerLike, BigramProvider {
 
     const start = this.entryOffsets[idx];
     const end = this.entryOffsets[idx + 1];
+    const seen = new Set<string>();
     const result: LemmaWithPOS[] = [];
 
     for (let i = start; i < end; i++) {
-      const entry = this.entries[i];
-      const lemmaIdx = entry >>> 4;
-      const posCode = entry & 0xf;
+      const { lemmaIdx, posCode } = this.unpackEntry(this.entries[i]);
+      const lemma = this.getLemma(lemmaIdx);
+      const pos = CODE_TO_POS[posCode] ?? ("" as WordClass);
+      const key = `${lemma}:${pos}`;
+
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push({ lemma, pos });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Look up lemmas with word class and morphological features.
+   * Only available with version 2 binary format.
+   */
+  lemmatizeWithMorph(word: string): LemmaWithMorph[] {
+    const normalized = word.toLowerCase();
+    const idx = this.findWord(normalized);
+
+    if (idx === -1) {
+      return [];
+    }
+
+    const start = this.entryOffsets[idx];
+    const end = this.entryOffsets[idx + 1];
+    const result: LemmaWithMorph[] = [];
+
+    for (let i = start; i < end; i++) {
+      const { lemmaIdx, posCode, caseCode, genderCode, numberCode } =
+        this.unpackEntry(this.entries[i]);
+
+      const morph: MorphFeatures = {};
+      const caseVal = CODE_TO_CASE[caseCode];
+      const genderVal = CODE_TO_GENDER[genderCode];
+      const numberVal = CODE_TO_NUMBER[numberCode];
+
+      if (caseVal) morph.case = caseVal;
+      if (genderVal) morph.gender = genderVal;
+      if (numberVal) morph.number = numberVal;
 
       result.push({
         lemma: this.getLemma(lemmaIdx),
         pos: CODE_TO_POS[posCode] ?? ("" as WordClass),
+        morph: Object.keys(morph).length > 0 ? morph : undefined,
       });
     }
 
     return result;
+  }
+
+  /**
+   * Check if morphological features are available (version 2+).
+   */
+  hasMorphFeatures(): boolean {
+    return this.version >= 2;
+  }
+
+  /**
+   * Get the binary format version.
+   */
+  getVersion(): number {
+    return this.version;
   }
 
   /**
