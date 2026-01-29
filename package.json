@@ -1,6 +1,6 @@
 {
   "name": "lemma-is",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "description": "Icelandic word form to lemma lookup for browser and Node.js",
   "keywords": [
     "icelandic",
@@ -24,7 +24,8 @@
   },
   "files": [
     "dist",
-    "data-dist/lemma-is.bin"
+    "data-dist/lemma-is.bin",
+    "README.md"
   ],
   "scripts": {
     "build": "tsdown",

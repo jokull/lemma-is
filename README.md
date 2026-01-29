@@ -4,15 +4,15 @@ Icelandic lemmatization for JavaScript. Maps inflected word forms to base forms 
 
 ## Why?
 
-Existing Icelandic NLP tools don't run in browsers:
+Existing Icelandic NLP tools are Python/C++:
 
 | Tool | Runtime | Standalone? | Notes |
 |------|---------|-------------|-------|
-| **[GreynirEngine](https://github.com/mideind/GreynirEngine)** | Python + C++ | ✓ | Gold standard. Full parser, POS tagger, 100+ MB. |
+| **[GreynirEngine](https://github.com/mideind/GreynirEngine)** | Python + C++ | ✓ | Gold standard. Full parser, POS tagger. |
 | **[Nefnir](https://github.com/lexis-project/Nefnir)** | Python | ✗ | Requires POS tags from IceNLP/IceStagger (Java, unmaintained). |
-| **lemma-is** | TypeScript | ✓ | Browser/Node/edge. Bigram disambiguation, compound splitting. |
+| **lemma-is** | TypeScript | ✓ | Node.js servers. Grammar-based disambiguation, compound splitting. |
 
-lemma-is trades parsing accuracy for portability—good enough for search, runs anywhere JavaScript runs.
+lemma-is trades parsing accuracy for JS ecosystem integration—good enough for search indexing, runs in any Node.js environment.
 
 ## Quickstart
 
@@ -20,24 +20,7 @@ lemma-is trades parsing accuracy for portability—good enough for search, runs 
 npm install lemma-is
 ```
 
-**Get the data** (~91 MB binary):
-```bash
-# Option 1: Download pre-built from npm
-cp node_modules/lemma-is/data-dist/lemma-is.bin ./public/
-
-# Option 2: Build from source (requires BÍN data + Python)
-# Download SHsnid.csv from https://bin.arnastofnun.is/DMII/LTdata/k-LTdata/
-uv run python scripts/build-data.py && uv run python scripts/build-binary.py
-```
-
-**Browser (Web Worker)** — see [`test.html`](test.html) for a complete example:
-```typescript
-// Load in worker to avoid blocking main thread
-const lemmatizer = await BinaryLemmatizer.load("/data/lemma-is.bin");
-self.postMessage({ lemmas: lemmatizer.lemmatize("börnin") }); // → ["barn"]
-```
-
-**Node.js endpoint**:
+**Node.js**:
 ```typescript
 import { readFileSync } from "fs";
 import { BinaryLemmatizer, extractIndexableLemmas } from "lemma-is";
@@ -441,15 +424,14 @@ This library makes tradeoffs for portability. Know what you're getting.
 
 ### File Size
 
-The binary is **~91 MB**. For serverless/edge with cold starts, that's significant. For browser apps, load in a Web Worker and cache aggressively.
+The binary is **~91 MB**. This library targets Node.js server environments where the data is loaded once at startup.
 
-```typescript
-// Cloudflare Workers: fits in 128MB memory limit, but cold starts are slow
-// Vercel Edge: works, but consider if you really need client-side lemmatization
-// Browser: use Service Worker caching, load once per session
-```
+Not recommended for:
+- **Serverless/edge** — cold start latency loading 91 MB
+- **Browser/Web Workers** — download size prohibitive for most users
+- **Cloudflare Workers** — fits 128 MB limit but cold starts are slow
 
-Consider server-side lemmatization if latency matters more than offline support.
+For browser applications, run lemmatization server-side and expose an API endpoint.
 
 ### No Query Expansion
 
@@ -573,4 +555,15 @@ pnpm build:data     # rebuild binary from BÍN source
 
 ## License
 
-MIT. Data derived from BÍN under the [BÍN license](https://bin.arnastofnun.is/DMII/LTdata/conditions/).
+MIT for the code.
+
+### Data License (BÍN)
+
+The linguistic data is derived from [BÍN](https://bin.arnastofnun.is/) (Beygingarlýsing íslensks nútímamáls) © Árni Magnússon Institute for Icelandic Studies.
+
+**By using this package, you agree to BÍN's conditions:**
+- Credit the Árni Magnússon Institute in your product's UI
+- Do not redistribute the raw data separately
+- Do not publish inflection paradigms without permission
+
+Full terms: [BÍN License Conditions](https://bin.arnastofnun.is/DMII/LTdata/conditions/)
