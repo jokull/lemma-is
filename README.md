@@ -4,7 +4,15 @@ Icelandic lemmatization for JavaScript. Maps inflected word forms to base forms 
 
 ## Why?
 
-Icelandic NLP tools exist but require Python or Java. This library works in browsers and Node.js—anywhere JavaScript runs.
+Existing Icelandic NLP tools don't run in browsers:
+
+| Tool | Runtime | Standalone? | Notes |
+|------|---------|-------------|-------|
+| **[GreynirEngine](https://github.com/mideind/GreynirEngine)** | Python + C++ | ✓ | Gold standard. Full parser, POS tagger, 100+ MB. |
+| **[Nefnir](https://github.com/lexis-project/Nefnir)** | Python | ✗ | Requires POS tags from IceNLP/IceStagger (Java, unmaintained). |
+| **lemma-is** | TypeScript | ✓ | Browser/Node/edge. Bigram disambiguation, compound splitting. |
+
+lemma-is trades parsing accuracy for portability—good enough for search, runs anywhere JavaScript runs.
 
 ## The Problem
 
