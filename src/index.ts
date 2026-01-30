@@ -36,10 +36,12 @@ export {
   applyGrammarRules,
   applyPrepositionRule,
   applyPronounVerbRule,
+  applyNounAfterPrepositionRule,
   canGovernCase,
   isKnownPreposition,
   getGovernedCases,
   type GrammarRuleMatch,
+  type GrammarLemmatizerLike,
 } from "./mini-grammar.js";
 export type {
   LemmatizerLike,

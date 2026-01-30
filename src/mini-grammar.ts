@@ -12,8 +12,16 @@
 import type {
   GrammaticalCase,
   LemmaWithMorph,
+  LemmaWithPOS,
   WordClass,
 } from "./types.js";
+
+/**
+ * Interface for lemmatizer used in grammar rules.
+ */
+export interface GrammarLemmatizerLike {
+  lemmatizeWithPOS?(word: string): LemmaWithPOS[];
+}
 
 /**
  * Preposition case government rules.
@@ -24,46 +32,46 @@ import type {
  *
  * Source: Greynir's Prepositions.conf
  */
-export const PREPOSITION_CASES: Map<string, Set<GrammaticalCase>> = new Map([
+export const PREPOSITION_CASES: Map<string, Set<GrammaticalCase>> = new Map<string, Set<GrammaticalCase>>([
   // Both accusative and dative
-  ["á", new Set(["þf", "þgf"])], // on/at (þf=direction, þgf=location)
-  ["í", new Set(["þf", "þgf"])], // in (þf=into, þgf=inside)
-  ["við", new Set(["þf", "þgf"])], // at/by (þf=against, þgf=near)
-  ["með", new Set(["þf", "þgf"])], // with (þf=bring, þgf=accompany)
-  ["undir", new Set(["þf", "þgf"])], // under (þf=motion, þgf=position)
-  ["yfir", new Set(["þf", "þgf"])], // over (þf=motion, þgf=position)
-  ["fyrir", new Set(["þf", "þgf"])], // for/before (þf=in exchange, þgf=in front)
+  ["á", new Set<GrammaticalCase>(["þf", "þgf"])], // on/at (þf=direction, þgf=location)
+  ["í", new Set<GrammaticalCase>(["þf", "þgf"])], // in (þf=into, þgf=inside)
+  ["við", new Set<GrammaticalCase>(["þf", "þgf"])], // at/by (þf=against, þgf=near)
+  ["með", new Set<GrammaticalCase>(["þf", "þgf"])], // with (þf=bring, þgf=accompany)
+  ["undir", new Set<GrammaticalCase>(["þf", "þgf"])], // under (þf=motion, þgf=position)
+  ["yfir", new Set<GrammaticalCase>(["þf", "þgf"])], // over (þf=motion, þgf=position)
+  ["fyrir", new Set<GrammaticalCase>(["þf", "þgf"])], // for/before (þf=in exchange, þgf=in front)
 
   // Accusative only
-  ["um", new Set(["þf"])], // about/around
-  ["gegnum", new Set(["þf"])], // through
-  ["kringum", new Set(["þf"])], // around
-  ["umhverfis", new Set(["þf"])], // around/surrounding
+  ["um", new Set<GrammaticalCase>(["þf"])], // about/around
+  ["gegnum", new Set<GrammaticalCase>(["þf"])], // through
+  ["kringum", new Set<GrammaticalCase>(["þf"])], // around
+  ["umhverfis", new Set<GrammaticalCase>(["þf"])], // around/surrounding
 
   // Dative only
-  ["af", new Set(["þgf"])], // of/from
-  ["frá", new Set(["þgf"])], // from
-  ["hjá", new Set(["þgf"])], // at/with (someone's place)
-  ["úr", new Set(["þgf"])], // out of
-  ["að", new Set(["þgf"])], // to/at
-  ["móti", new Set(["þgf"])], // against
-  ["nálægt", new Set(["þgf"])], // near
-  ["gegn", new Set(["þgf"])], // against
-  ["gagnvart", new Set(["þgf"])], // towards/regarding
-  ["handa", new Set(["þgf"])], // for (someone)
-  ["meðal", new Set(["ef"])], // among (actually genitive)
+  ["af", new Set<GrammaticalCase>(["þgf"])], // of/from
+  ["frá", new Set<GrammaticalCase>(["þgf"])], // from
+  ["hjá", new Set<GrammaticalCase>(["þgf"])], // at/with (someone's place)
+  ["úr", new Set<GrammaticalCase>(["þgf"])], // out of
+  ["að", new Set<GrammaticalCase>(["þgf"])], // to/at
+  ["móti", new Set<GrammaticalCase>(["þgf"])], // against
+  ["nálægt", new Set<GrammaticalCase>(["þgf"])], // near
+  ["gegn", new Set<GrammaticalCase>(["þgf"])], // against
+  ["gagnvart", new Set<GrammaticalCase>(["þgf"])], // towards/regarding
+  ["handa", new Set<GrammaticalCase>(["þgf"])], // for (someone)
+  ["meðal", new Set<GrammaticalCase>(["ef"])], // among (actually genitive)
 
   // Genitive only
-  ["til", new Set(["ef"])], // to
-  ["án", new Set(["ef"])], // without
-  ["vegna", new Set(["ef"])], // because of
-  ["sakir", new Set(["ef"])], // because of
-  ["utan", new Set(["ef"])], // outside
-  ["innan", new Set(["ef"])], // inside
-  ["meðfram", new Set(["þgf"])], // along
-  ["milli", new Set(["ef"])], // between
-  ["auk", new Set(["ef"])], // in addition to
-  ["í stað", new Set(["ef"])], // instead of
+  ["til", new Set<GrammaticalCase>(["ef"])], // to
+  ["án", new Set<GrammaticalCase>(["ef"])], // without
+  ["vegna", new Set<GrammaticalCase>(["ef"])], // because of
+  ["sakir", new Set<GrammaticalCase>(["ef"])], // because of
+  ["utan", new Set<GrammaticalCase>(["ef"])], // outside
+  ["innan", new Set<GrammaticalCase>(["ef"])], // inside
+  ["meðfram", new Set<GrammaticalCase>(["þgf"])], // along
+  ["milli", new Set<GrammaticalCase>(["ef"])], // between
+  ["auk", new Set<GrammaticalCase>(["ef"])], // in addition to
+  ["í stað", new Set<GrammaticalCase>(["ef"])], // instead of
 ]);
 
 /**
@@ -189,27 +197,97 @@ export function applyPronounVerbRule(
 }
 
 /**
+ * Apply noun-after-preposition rule to disambiguate.
+ *
+ * If the previous word is a preposition and the current word has a
+ * noun candidate with a case governed by that preposition, prefer
+ * the noun reading.
+ *
+ * This rule only applies when:
+ * - The previous word is UNAMBIGUOUSLY a preposition (no pronoun reading), OR
+ * - The current word has no verb candidate
+ *
+ * Example: "til fundar" → "fundar" is noun "fundur" (genitive), not verb "funda"
+ * Counter-example: "við fórum" → "við" is pronoun, "fórum" is verb "fara"
+ *
+ * @param candidates - All possible readings of the current word
+ * @param prevWord - The previous word (raw form)
+ * @param lemmatizer - Lemmatizer for looking up the previous word
+ * @returns GrammarRuleMatch if a rule applies, null otherwise
+ */
+export function applyNounAfterPrepositionRule(
+  candidates: LemmaWithMorph[],
+  prevWord: string | null,
+  lemmatizer: GrammarLemmatizerLike | null
+): GrammarRuleMatch | null {
+  if (!prevWord || !lemmatizer?.lemmatizeWithPOS) return null;
+
+  // Check if previous word is a preposition
+  const prevLemmas = lemmatizer.lemmatizeWithPOS(prevWord);
+  const prepCandidate = prevLemmas.find((l) => l.pos === "fs");
+  if (!prepCandidate) return null;
+
+  // Check if the previous word could also be a pronoun
+  const hasPronounReading = prevLemmas.some((l) => l.pos === "fn");
+
+  // Check if current word has a verb candidate
+  const hasVerbCandidate = candidates.some((c) => c.pos === "so");
+
+  // If prevWord is ambiguously pronoun/preposition AND current word can be a verb,
+  // don't apply this rule (let pronoun+verb rule or bigrams handle it)
+  if (hasPronounReading && hasVerbCandidate) {
+    return null;
+  }
+
+  // Get cases this preposition governs
+  const governedCases = PREPOSITION_CASES.get(prepCandidate.lemma);
+  if (!governedCases) return null;
+
+  // Find noun candidate with matching case
+  const nounCandidates = candidates.filter((c) => c.pos === "no");
+  for (const noun of nounCandidates) {
+    if (noun.morph?.case && governedCases.has(noun.morph.case)) {
+      return {
+        lemma: noun.lemma,
+        pos: "no",
+        rule: `noun_after_prep+${noun.morph.case}`,
+        confidence: 0.9,
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
  * Apply all mini-grammar rules in sequence.
  *
  * Rules are applied in order of specificity:
  * 1. Preposition + case government (most reliable)
- * 2. Pronoun + verb pattern
+ * 2. Noun after preposition (governed case)
+ * 3. Pronoun + verb pattern
  *
  * @param candidates - All possible readings of the current word
  * @param prevWord - Previous word (raw form)
  * @param nextWordMorph - Morphological analyses of the next word
+ * @param lemmatizer - Optional lemmatizer for looking up previous word POS
  * @returns GrammarRuleMatch if any rule applies, null otherwise
  */
 export function applyGrammarRules(
   candidates: LemmaWithMorph[],
   prevWord: string | null,
-  nextWordMorph: LemmaWithMorph[]
+  nextWordMorph: LemmaWithMorph[],
+  lemmatizer: GrammarLemmatizerLike | null = null
 ): GrammarRuleMatch | null {
   // Rule 1: Preposition + governed case
   const prepRule = applyPrepositionRule(candidates, nextWordMorph);
   if (prepRule) return prepRule;
 
-  // Rule 2: Pronoun + verb
+  // Rule 2: Noun after preposition with governed case
+  const nounAfterPrepRule = applyNounAfterPrepositionRule(candidates, prevWord, lemmatizer);
+  if (nounAfterPrepRule) return nounAfterPrepRule;
+
+  // Rule 3: Pronoun + verb
   const verbRule = applyPronounVerbRule(candidates, prevWord);
   if (verbRule) return verbRule;
 

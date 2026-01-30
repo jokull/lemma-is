@@ -16,6 +16,7 @@ import {
   applyGrammarRules,
   applyPrepositionRule,
   applyPronounVerbRule,
+  applyNounAfterPrepositionRule,
   canGovernCase,
   isKnownPreposition,
   getGovernedCases,
@@ -197,6 +198,90 @@ describe("Mini-grammar preposition+case rules", () => {
 
       const result = applyPrepositionRule(candidates, nextWordMorph);
       expect(result).toBeNull();
+    });
+  });
+});
+
+describe("Mini-grammar noun-after-preposition rules", () => {
+  let lemmatizer: BinaryLemmatizer;
+
+  beforeAll(() => {
+    const dataDir = join(import.meta.dirname, "..", "data-dist");
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+    );
+  });
+
+  describe("applyNounAfterPrepositionRule function", () => {
+    it("prefers noun when previous word is preposition governing the case", () => {
+      // "til fundar" - "fundar" should be noun "fundur" (genitive), not verb "funda"
+      const candidates: LemmaWithMorph[] = [
+        { lemma: "fundur", pos: "no", morph: { case: "ef", gender: "kk", number: "et" } },
+        { lemma: "funda", pos: "so" },
+      ];
+
+      const result = applyNounAfterPrepositionRule(candidates, "til", lemmatizer);
+      expect(result).not.toBeNull();
+      expect(result?.lemma).toBe("fundur");
+      expect(result?.pos).toBe("no");
+      expect(result?.rule).toBe("noun_after_prep+ef");
+    });
+
+    it("returns null when previous word is not a preposition", () => {
+      const candidates: LemmaWithMorph[] = [
+        { lemma: "fundur", pos: "no", morph: { case: "ef" } },
+        { lemma: "funda", pos: "so" },
+      ];
+
+      const result = applyNounAfterPrepositionRule(candidates, "hestur", lemmatizer);
+      expect(result).toBeNull();
+    });
+
+    it("returns null when noun case is not governed by preposition", () => {
+      const candidates: LemmaWithMorph[] = [
+        { lemma: "hestur", pos: "no", morph: { case: "þgf" } }, // dative
+      ];
+
+      // "til" governs genitive (ef), not dative (þgf)
+      const result = applyNounAfterPrepositionRule(candidates, "til", lemmatizer);
+      expect(result).toBeNull();
+    });
+
+    it("returns null when previous word is ambiguously pronoun/preposition AND current word can be verb", () => {
+      // "við fórum" - "við" is pronoun, "fórum" should be verb "fara"
+      const candidates: LemmaWithMorph[] = [
+        { lemma: "fara", pos: "so" },
+        { lemma: "fóra", pos: "no", morph: { case: "þgf" } },
+      ];
+
+      // "við" can be both pronoun and preposition governing þgf
+      const result = applyNounAfterPrepositionRule(candidates, "við", lemmatizer);
+      expect(result).toBeNull();
+    });
+
+    it("applies rule when previous word is unambiguously a preposition", () => {
+      // "til fundar" - "til" is unambiguously a preposition (no pronoun reading)
+      const candidates: LemmaWithMorph[] = [
+        { lemma: "fundur", pos: "no", morph: { case: "ef" } },
+        { lemma: "funda", pos: "so" },
+      ];
+
+      const result = applyNounAfterPrepositionRule(candidates, "til", lemmatizer);
+      expect(result).not.toBeNull();
+      expect(result?.lemma).toBe("fundur");
+    });
+
+    it("applies rule even with ambiguous prevWord when current has no verb reading", () => {
+      // If current word has no verb candidate, the rule can apply
+      const candidates: LemmaWithMorph[] = [
+        { lemma: "fundur", pos: "no", morph: { case: "þgf" } },
+        // No verb candidate
+      ];
+
+      const result = applyNounAfterPrepositionRule(candidates, "við", lemmatizer);
+      expect(result).not.toBeNull();
+      expect(result?.lemma).toBe("fundur");
     });
   });
 });

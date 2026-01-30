@@ -3,75 +3,58 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Icelandic Lemmatizer</title>
+  <title>lemma-is</title>
   <style>
     * { box-sizing: border-box; }
     body {
       font-family: system-ui, -apple-system, sans-serif;
-      max-width: 800px;
+      max-width: 900px;
       margin: 0 auto;
       padding: 2rem;
-      background: #f5f5f5;
+      background: #f8f9fa;
+      color: #1a1a1a;
     }
     h1 { margin-bottom: 0.5rem; }
-    .subtitle { color: #666; margin-bottom: 2rem; }
+    .subtitle { color: #666; margin-bottom: 1.5rem; line-height: 1.5; }
+    .download-note {
+      background: #fff3cd;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+      color: #664d03;
+    }
     textarea {
       width: 100%;
-      height: 120px;
+      height: 100px;
       padding: 1rem;
       font-size: 1rem;
-      border: 2px solid #ddd;
+      border: 2px solid #e0e0e0;
       border-radius: 8px;
       resize: vertical;
+      background: white;
     }
     textarea:focus { outline: none; border-color: #0066cc; }
-    textarea:disabled { background: #f9f9f9; }
-    .controls {
-      margin-top: 1rem;
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .controls label {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      cursor: pointer;
-    }
-    .output {
-      margin-top: 1.5rem;
-      padding: 1.5rem;
-      background: white;
+    .data-stats {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 1rem 1.25rem;
       border-radius: 8px;
-      border: 1px solid #ddd;
-    }
-    .output h3 { margin-top: 0; }
-    .lemmas {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      min-height: 2rem;
-    }
-    .lemma {
-      background: #e8f4fd;
-      padding: 0.25rem 0.75rem;
-      border-radius: 4px;
+      margin-bottom: 1.5rem;
       font-size: 0.9rem;
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
     }
-    .ambiguous { background: #fff3cd; }
-    .stopword { background: #f0f0f0; color: #999; text-decoration: line-through; }
-    .compound { background: #d4edda; }
-    .stats { color: #666; font-size: 0.85rem; margin-top: 1rem; }
-    .loading {
-      text-align: center;
-      padding: 3rem;
-      color: #666;
-    }
+    .data-stats .stat { display: flex; flex-direction: column; }
+    .data-stats .stat-value { font-size: 1.25rem; font-weight: 600; }
+    .data-stats .stat-label { font-size: 0.75rem; opacity: 0.9; }
+
+    /* Loading state */
+    .loading { text-align: center; padding: 3rem; color: #666; }
     .loading-spinner {
       display: inline-block;
-      width: 20px;
-      height: 20px;
+      width: 20px; height: 20px;
       border: 2px solid #ddd;
       border-top-color: #0066cc;
       border-radius: 50%;
@@ -80,168 +63,647 @@
       vertical-align: middle;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .progress-bar {
-      width: 100%;
-      height: 4px;
-      background: #ddd;
-      border-radius: 2px;
-      margin-top: 1rem;
+    .progress-bar { width: 100%; height: 8px; background: #ddd; border-radius: 4px; margin-top: 1rem; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); transition: width 0.2s; }
+    .progress-text { margin-top: 0.5rem; font-size: 0.85rem; }
+    .error { color: #cc0000; background: #fee; padding: 1rem; border-radius: 8px; margin-top: 1rem; }
+
+    /* Results panel */
+    .results-panel {
+      margin-top: 1.5rem;
+      background: white;
+      border-radius: 12px;
+      border: 1px solid #e0e0e0;
       overflow: hidden;
     }
-    .progress-fill {
-      height: 100%;
-      background: #0066cc;
-      transition: width 0.3s;
+    .panel-header {
+      padding: 1rem 1.25rem;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
     }
-    .error { color: #cc0000; }
+    .panel-header h3 { margin: 0; font-size: 1rem; }
+    .panel-content { padding: 1.25rem; }
+
+    /* Summary metrics */
+    .metrics {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.25rem;
+    }
+    .metric {
+      background: #f8f9fa;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      text-align: center;
+      min-width: 100px;
+    }
+    .metric-value { font-size: 1.5rem; font-weight: 700; }
+    .metric-label { font-size: 0.75rem; color: #666; margin-top: 0.25rem; }
+    .metric.indexed { background: #d4edda; }
+    .metric.indexed .metric-value { color: #155724; }
+    .metric.expanded { background: #cce5ff; }
+    .metric.expanded .metric-value { color: #004085; }
+    .metric.rejected { background: #f8d7da; }
+    .metric.rejected .metric-value { color: #721c24; }
+    .metric.stopwords { background: #e2e3e5; }
+    .metric.stopwords .metric-value { color: #383d41; }
+
+    /* Index terms display */
+    .index-terms {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 1rem;
+      background: #f8f9fa;
+      border-radius: 8px;
+      min-height: 3rem;
+    }
+    .index-term {
+      background: #d4edda;
+      color: #155724;
+      padding: 0.35rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    .index-term.from-compound {
+      background: #cce5ff;
+      color: #004085;
+    }
     .hint { color: #999; font-style: italic; }
+
+    /* Word flow section */
+    .word-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .word-card {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border-left: 4px solid #dee2e6;
+    }
+    .word-card.disambiguated { border-left-color: #ffc107; }
+    .word-card.compound { border-left-color: #17a2b8; }
+    .word-card.stopword { border-left-color: #6c757d; opacity: 0.6; }
+
+    .word-original {
+      font-weight: 600;
+      min-width: 100px;
+      color: #495057;
+    }
+    .word-arrow {
+      color: #adb5bd;
+      font-size: 1.25rem;
+    }
+    .word-result {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      flex: 1;
+    }
+    .word-lemma {
+      background: #d4edda;
+      color: #155724;
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    .word-lemma.compound-part {
+      background: #cce5ff;
+      color: #004085;
+    }
+    .word-rejected {
+      color: #dc3545;
+      text-decoration: line-through;
+      font-size: 0.85rem;
+      opacity: 0.7;
+    }
+    .word-pos {
+      font-size: 0.75rem;
+      color: #6c757d;
+      background: #e9ecef;
+      padding: 0.15rem 0.4rem;
+      border-radius: 3px;
+    }
+    .word-badge {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+    .badge-grammar { background: #fff3cd; color: #856404; }
+    .badge-bigram { background: #d1ecf1; color: #0c5460; }
+    .badge-compound { background: #cce5ff; color: #004085; }
+    .badge-stopword { background: #e2e3e5; color: #383d41; }
+    .badge-fallback { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
+
+    /* Compound breakdown */
+    .compound-breakdown {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.85rem;
+    }
+    .compound-plus { color: #17a2b8; font-weight: 600; }
+
+    /* Toggle controls */
+    .controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .controls label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #495057;
+    }
+    .controls input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #667eea;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .tab {
+      padding: 0.5rem 1rem;
+      border: none;
+      background: #e9ecef;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: #495057;
+      transition: all 0.15s;
+    }
+    .tab:hover { background: #dee2e6; }
+    .tab.active {
+      background: #667eea;
+      color: white;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Ejection list */
+    .ejection-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .ejection-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 1rem;
+      background: #fff5f5;
+      border-radius: 6px;
+      border-left: 3px solid #dc3545;
+    }
+    .ejection-word { font-weight: 500; color: #495057; min-width: 80px; }
+    .ejection-chosen {
+      background: #d4edda;
+      color: #155724;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    .ejection-vs { color: #adb5bd; font-size: 0.8rem; }
+    .ejection-rejected {
+      color: #dc3545;
+      text-decoration: line-through;
+      font-size: 0.85rem;
+    }
+    .ejection-reason {
+      margin-left: auto;
+      font-size: 0.75rem;
+      color: #6c757d;
+    }
+
+    /* Expansion list */
+    .expansion-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .expansion-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 1rem;
+      background: #f0f7ff;
+      border-radius: 6px;
+      border-left: 3px solid #17a2b8;
+    }
+    .expansion-word { font-weight: 500; color: #495057; min-width: 120px; }
+    .expansion-parts {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+    .expansion-part {
+      background: #cce5ff;
+      color: #004085;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    .expansion-plus { color: #17a2b8; font-weight: 600; }
   </style>
 </head>
 <body>
-  <h1>Icelandic Lemmatizer</h1>
-  <p class="subtitle" id="subtitle">Loading...</p>
+  <h1>lemma-is</h1>
+  <p class="subtitle">
+    Search-optimized Icelandic lemmatization with disambiguation and compound splitting.
+  </p>
 
   <div id="app">
+    <div class="download-note">
+      First load downloads ~91 MB of dictionary data. Cached for instant subsequent loads.
+    </div>
     <div class="loading">
       <div><span class="loading-spinner"></span><span id="status">Initializing...</span></div>
       <div class="progress-bar"><div class="progress-fill" id="progress" style="width: 0%"></div></div>
+      <div class="progress-text" id="progress-text">0 MB / 91 MB</div>
     </div>
   </div>
 
   <script>
-    // Inline Web Worker code
+    // Web Worker code for loading and processing
     const workerCode = `
-      let lemmas = null;
-      let lookup = null;
-      let bigrams = null;
-      let unigrams = null;
-      let knownLemmas = null;
+      // Binary format constants
+      const MAGIC = 0x4c454d41; // "LEMA"
+      const CODE_TO_POS = ["no", "so", "lo", "ao", "fs", "fn", "st", "to", "gr", "uh"];
+      const CODE_TO_CASE = [undefined, "nf", "þf", "þgf", "ef"];
+      const CODE_TO_GENDER = [undefined, "kk", "kvk", "hk"];
+      const CODE_TO_NUMBER = ["et", "ft"];
+      const POS_NAMES = {
+        "no": "noun", "so": "verb", "lo": "adj", "ao": "adv",
+        "fs": "prep", "fn": "pron", "st": "conj", "to": "num", "gr": "art", "uh": "interj"
+      };
 
       // Stopwords
       const STOPWORDS = new Set([
         "á","að","aðra","aðrar","aðrir","af","alla","allan","allar","allir",
-        "allra","allrar","allri","alls","allt","allur","án","annað","annan",
-        "annar","annarra","annarrar","annarri","annars","ásamt","auk","bæði",
-        "eða","ef","eftir","ég","ein","eina","einar","einhver","einhverja",
-        "einir","einn","einna","einnar","einni","eins","einu","einum","eitt",
-        "ekkert","en","enda","enga","engan","engar","engin","enginn","engir",
-        "engra","engrar","engri","engu","engum","er","flestöll","flestöllu",
-        "frá","fram","fyrir","gegn","gegnum","hana","hann","hans","heldur",
-        "hennar","henni","hér","hið","hin","hina","hinar","hinir","hinn",
-        "hinna","hinnar","hinni","hins","hinu","hinum","hitt","hjá","honum",
-        "hún","hvað","hvaða","hver","hverja","hverjar","hverjir","hverju",
-        "hverjum","hvern","hverra","hverrar","hverri","hvers","hvert","hvor",
-        "hvora","hvorar","hvorir","hvorki","hvorn","hvorra","hvorrar","hvorri",
-        "hvors","hvort","hvoru","hvorum","í","inn","innan","jafnvel","já",
-        "mér","með","meðal","mig","milli","mín","mína","mínar","mínir","minn",
-        "minna","minnar","minni","míns","mínu","mínum","mitt","nær","né",
-        "nei","nema","nokkra","nokkrar","nokkrir","nokkru","nokkrum","nokkuð",
-        "nokkur","nokkurn","nokkurra","nokkurrar","nokkurri","nokkurs","nokkurt",
-        "nú","og","okkar","okkur","oss","sá","sama","saman","samt","sem","sér",
-        "sig","sín","sína","sínar","sínir","sinn","sinna","sinnar","sinni",
-        "síns","sínu","sínum","sitt","sú","sum","suma","sumar","sumir","sumra",
-        "sumrar","sumri","sums","sumt","sumu","sumum","sumur","svo","til","um",
-        "undan","undir","upp","úr","út","utan","vegna","við","viður","vor",
-        "vora","vorar","vorir","vorn","vorra","vorrar","vorri","vors","vort",
-        "voru","vorum","yfir","þá","það","þær","þann","þar","þau","þegar",
-        "þeim","þeir","þeirra","þeirrar","þeirri","þennan","þér","þess",
-        "þessa","þessar","þessara","þessarar","þessari","þessi","þessir",
-        "þessu","þessum","þetta","þið","þig","þín","þína","þínar","þínir",
-        "þinn","þinna","þinnar","þinni","þíns","þínu","þínum","þitt","þó",
-        "þótt","þú","því"
+        "allnokkra","allnokkrar","allnokkrir","allnokkru","allnokkrum","allnokkuð",
+        "allnokkur","allnokkurn","allnokkurra","allnokkurrar","allnokkurri","allnokkurs",
+        "allnokkurt","allra","allrar","allri","alls","allt","alltað","allur","án",
+        "andspænis","annað","annaðhvort","annan","annar","annarra","annarrar","annarri",
+        "annars","árla","ásamt","auk","austan","austanundir","austur","báða","báðar",
+        "báðir","báðum","bæði","bak","beggja","eða","eður","ef","eftir","ég","ein",
+        "eina","einar","einhver","einhverja","einhverjar","einhverjir","einhverju",
+        "einhverjum","einhvern","einhverra","einhverrar","einhverri","einhvers","einir",
+        "einn","einna","einnar","einni","eins","einskis","einu","einum","eitt","eitthvað",
+        "eitthvert","ekkert","ella","ellegar","en","enda","enga","engan","engar","engin",
+        "enginn","engir","engra","engrar","engri","engu","engum","er","fáein","fáeina",
+        "fáeinar","fáeinir","fáeinna","fáeinum","fjær","fjarri","flestalla","flestallan",
+        "flestallar","flestallir","flestallra","flestallrar","flestallri","flestalls",
+        "flestallt","flestallur","flestöll","flestöllu","flestöllum","frá","fram","fyrir",
+        "fyrst","gagnstætt","gagnvart","gegn","gegnt","gegnum","hana","handa","handan",
+        "hann","hans","heldur","hennar","henni","hér","hið","hin","hina","hinar","hinir","hinn",
+        "hinna","hinnar","hinni","hins","hinu","hinum","hitt","hjá","honum","hún","hvað",
+        "hvaða","hvenær","hver","hverja","hverjar","hverjir","hverju","hverjum","hvern",
+        "hverra","hverrar","hverri","hvers","hvert","hvílík","hvílíka","hvílíkan",
+        "hvílíkar","hvílíkir","hvílíkra","hvílíkrar","hvílíkri","hvílíks","hvílíkt",
+        "hvílíku","hvílíkum","hvílíkur","hvor","hvora","hvorar","hvorir","hvorki","hvorn",
+        "hvorra","hvorrar","hvorri","hvors","hvort","hvoru","hvorug","hvoruga","hvorugan",
+        "hvorugar","hvorugir","hvorugra","hvorugrar","hvorugri","hvorugs","hvorugt",
+        "hvorugu","hvorugum","hvorugur","hvorum","í","inn","innan","innanundir","jafnframt",
+        "jafnhliða","kring","kringum","með","meðal","meðan","meður","mér","mestalla",
+        "mestallan","mestallar","mestallir","mestallra","mestallrar","mestallri","mestalls",
+        "mestallt","mestallur","mestöll","mestöllu","mestöllum","miðli","mig","milli",
+        "millum","mín","mína","mínar","mínir","minn","minna","minnar","minni","míns",
+        "mínu","mínum","mitt","mót","móti","nær","nærri","næst","næstum","nálægt","né",
+        "neðan","nein","neina","neinar","neinir","neinn","neinna","neinnar","neinni",
+        "neins","neinu","neinum","neitt","nema","niður","nokkra","nokkrar","nokkrir",
+        "nokkru","nokkrum","nokkuð","nokkur","nokkurn","nokkurra","nokkurrar","nokkurri",
+        "nokkurs","nokkurt","norðan","nú","öðru","öðrum","of","ofan","ofar","og","óháð",
+        "okkar","okkur","öll","öllu","öllum","önnur","órafjarri","oss","sá","sakir",
+        "sama","saman","samar","samfara","samhliða","sami","samir","samkvæmt","samra",
+        "samrar","samri","sams","samskipa","samt","samtímis","samur","sem","sér","sérhvað",
+        "sérhver","sérhverja","sérhverjar","sérhverjir","sérhverju","sérhverjum","sérhvern",
+        "sérhverra","sérhverrar","sérhverri","sérhvers","sérhvert","síðan","síðla","sig",
+        "sín","sína","sínar","sínhver","sínhverja","sínhverjar","sínhverjir","sínhverju",
+        "sínhverjum","sínhvern","sínhverra","sínhverrar","sínhverri","sínhvers","sínhvert",
+        "sínhvor","sínhvora","sínhvorar","sínhvorir","sínhvorn","sínhvorra","sínhvorrar",
+        "sínhvorri","sínhvors","sínhvort","sínhvoru","sínhvorum","sínir","sinn","sinna",
+        "sinnar","sinnhver","sinnhverja","sinnhverjar","sinnhverjir","sinnhverju",
+        "sinnhverjum","sinnhvern","sinnhverra","sinnhverrar","sinnhverri","sinnhvers",
+        "sinnhvert","sinnhvor","sinnhvora","sinnhvorar","sinnhvorir","sinnhvorn",
+        "sinnhvorra","sinnhvorrar","sinnhvorri","sinnhvors","sinnhvort","sinnhvoru",
+        "sinnhvorum","sinni","síns","sínu","sínum","sitt","sitthvað","sitthver",
+        "sitthverja","sitthverjar","sitthverjir","sitthverju","sitthverjum","sitthvern",
+        "sitthverra","sitthverrar","sitthverri","sitthvers","sitthvert","sitthvor",
+        "sitthvora","sitthvorar","sitthvorir","sitthvorn","sitthvorra","sitthvorrar",
+        "sitthvorri","sitthvors","sitthvort","sitthvoru","sitthvorum","sjálf","sjálfa",
+        "sjálfan","sjálfar","sjálfir","sjálfra","sjálfrar","sjálfri","sjálfs","sjálft",
+        "sjálfu","sjálfum","sjálfur","slík","slíka","slíkan","slíkar","slíkir","slíkra",
+        "slíkrar","slíkri","slíks","slíkt","slíku","slíkum","slíkur","snemma","sökum",
+        "söm","sömu","sömum","sú","sum","suma","suman","sumar","sumir","sumra","sumrar",
+        "sumri","sums","sumt","sumu","sumum","sumur","sunnan","svo","til","tráss","um",
+        "umfram","umhverfis","undan","undir","uns","upp","úr","út","utan","útundan",
+        "vegna","vér","vestan","vestur","vettugi","við","viður","vor","vora","vorar",
+        "vorir","vorn","vorra","vorrar","vorri","vors","vort","voru","vorum","yðar",
+        "yður","yfir","ykkar","ykkur","ýmis","ýmiss","ýmissa","ýmissar","ýmissi","ýmist",
+        "ýmsa","ýmsan","ýmsar","ýmsir","ýmsu","ýmsum","þá","það","þær","þann","þar",
+        "þau","þegar","þeim","þeir","þeirra","þeirrar","þeirri","þennan","þér","þess",
+        "þessa","þessar","þessara","þessarar","þessari","þessi","þessir","þessu",
+        "þessum","þetta","þið","þig","þín","þína","þínar","þínir","þinn","þinna",
+        "þinnar","þinni","þíns","þínu","þínum","þitt","þó","þónokkra","þónokkrar",
+        "þónokkrir","þónokkru","þónokkrum","þónokkuð","þónokkur","þónokkurn","þónokkurra",
+        "þónokkurrar","þónokkurri","þónokkurs","þónokkurt","þótt","þú","því","þvílík",
+        "þvílíka","þvílíkan","þvílíkar","þvílíkir","þvílíkra","þvílíkrar","þvílíkri",
+        "þvílíks","þvílíkt","þvílíku","þvílíkum","þvílíkur"
       ]);
 
-      async function loadFile(url, onProgress) {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Failed to load " + url);
-        const stream = response.body.pipeThrough(new DecompressionStream('gzip'));
-        return await new Response(stream).text();
+      // Contextual stopword rules (POS-based)
+      const CONTEXTUAL_STOPWORDS = new Map([
+        ["á", new Set(["fs", "ao"])],
+        ["við", new Set(["fs", "fn"])],
+        ["af", new Set(["fs", "ao"])],
+        ["til", new Set(["fs"])],
+        ["um", new Set(["fs"])],
+        ["frá", new Set(["fs"])],
+        ["yfir", new Set(["fs", "ao"])],
+        ["undir", new Set(["fs", "ao"])],
+        ["fyrir", new Set(["fs", "ao"])],
+        ["eftir", new Set(["fs", "ao"])],
+        ["gegn", new Set(["fs"])],
+        ["hjá", new Set(["fs"])],
+        ["úr", new Set(["fs"])],
+        ["í", new Set(["fs"])]
+      ]);
+
+      // Protected lemmas (place names, etc.)
+      const PROTECTED_LEMMAS = new Set([
+        "ísland","england","írland","skotland","finnland","grænland","holland",
+        "þýskaland","frakkland","pólland","tékkland","svissland","rússland",
+        "eistland","lettland","litháen","danmörk","noregur","svíþjóð","bandaríkin",
+        "spánn","portúgal","ítalía","grikkland","þingvellir","akureyri","ísafjörður",
+        "reykjavík","keflavík","hafnarfjörður","kópavogur","seltjarnarnes","garðabær",
+        "mosfellsbær","vestmannaeyjar","húsavík","sauðárkrókur","siglufjörður",
+        "ólafsfjörður","dalvík","egilsstaðir","neskaupstaður","seyðisfjörður",
+        "eskifjörður","reyðarfjörður","fáskrúðsfjörður","stöðvarfjörður","djúpivogur",
+        "höfn","vík","selfoss","hveragerði","þorlákshöfn","grindavík","sandgerði",
+        "borgarnes","stykkishólmur","grundarfjörður","ólafsvík","búðardalur",
+        "patreksfjörður","flateyri","suðureyri","bolungarvík","hólmavík","hvammstangi",
+        "blönduós","skagaströnd","varmahlíð","hlíðarendi","bergþórshvol",
+        "íslandsbanki","landsbankinn","arionbanki","alþingi"
+      ]);
+
+      // Preposition case government (for noun-after-prep disambiguation)
+      const PREPOSITION_CASES = new Map([
+        ["á", new Set(["þf", "þgf"])],
+        ["í", new Set(["þf", "þgf"])],
+        ["við", new Set(["þf", "þgf"])],
+        ["með", new Set(["þf", "þgf"])],
+        ["undir", new Set(["þf", "þgf"])],
+        ["yfir", new Set(["þf", "þgf"])],
+        ["fyrir", new Set(["þf", "þgf"])],
+        ["um", new Set(["þf"])],
+        ["gegnum", new Set(["þf"])],
+        ["kringum", new Set(["þf"])],
+        ["umhverfis", new Set(["þf"])],
+        ["af", new Set(["þgf"])],
+        ["frá", new Set(["þgf"])],
+        ["hjá", new Set(["þgf"])],
+        ["úr", new Set(["þgf"])],
+        ["að", new Set(["þgf"])],
+        ["móti", new Set(["þgf"])],
+        ["nálægt", new Set(["þgf"])],
+        ["gegn", new Set(["þgf"])],
+        ["gagnvart", new Set(["þgf"])],
+        ["handa", new Set(["þgf"])],
+        ["meðal", new Set(["ef"])],
+        ["til", new Set(["ef"])],
+        ["án", new Set(["ef"])],
+        ["vegna", new Set(["ef"])],
+        ["sakir", new Set(["ef"])],
+        ["utan", new Set(["ef"])],
+        ["innan", new Set(["ef"])],
+        ["meðfram", new Set(["þgf"])],
+        ["milli", new Set(["ef"])],
+        ["auk", new Set(["ef"])],
+      ]);
+
+      // Nominative pronouns (for pronoun+verb rule)
+      const NOMINATIVE_PRONOUNS = new Set([
+        "ég", "þú", "hann", "hún", "það", "við", "þið", "þeir", "þær", "þau"
+      ]);
+
+      // Compound splitting constants
+      const LINKING_LETTERS = ["s", "u", "a"];
+      const MIN_PART = 3;
+      const COMMON_COMPOUND_TAILS = new Set([
+        "maður","kona","stjóri","ráðherra","forseti","formaður","fulltrúi","starfsmaður",
+        "hús","staður","vegur","borg","bær","dalur","fjörður",
+        "félag","banki","sjóður","stofnun","ráð",
+        "rannsókn","greiðsla","mál","kerfi","verk","þjónusta","rekstur","viðskipti","verð","kostnaður"
+      ]);
+
+      // Lemmatizer state
+      let buffer = null;
+      let stringPool = null;
+      let lemmaOffsets = null;
+      let lemmaLengths = null;
+      let wordOffsets = null;
+      let wordLengths = null;
+      let entryOffsets = null;
+      let entries = null;
+      let bigramW1Offsets = null;
+      let bigramW1Lengths = null;
+      let bigramW2Offsets = null;
+      let bigramW2Lengths = null;
+      let bigramFreqs = null;
+      let lemmaCount = 0;
+      let wordCount = 0;
+      let bigramCount = 0;
+      let version = 0;
+      let knownLemmas = null;
+      const decoder = new TextDecoder("utf-8");
+
+      function getString(offset, length) {
+        return decoder.decode(stringPool.subarray(offset, offset + length));
       }
 
-      function parseLookup(text) {
-        const map = new Map();
-        for (const line of text.split('\\n')) {
-          if (!line) continue;
-          const [word, entriesStr] = line.split('\\t');
-          if (word && entriesStr) {
-            const entries = [];
-            for (const part of entriesStr.split(',')) {
-              const colonIdx = part.indexOf(':');
-              if (colonIdx !== -1) {
-                entries.push({
-                  index: parseInt(part.slice(0, colonIdx), 10),
-                  pos: part.slice(colonIdx + 1)
-                });
-              } else {
-                entries.push({ index: parseInt(part, 10), pos: '' });
-              }
-            }
-            map.set(word, entries);
-          }
+      function getLemma(index) {
+        return getString(lemmaOffsets[index], lemmaLengths[index]);
+      }
+
+      function getWord(index) {
+        return getString(wordOffsets[index], wordLengths[index]);
+      }
+
+      function findWord(word) {
+        let left = 0;
+        let right = wordCount - 1;
+        while (left <= right) {
+          const mid = (left + right) >>> 1;
+          const midWord = getWord(mid);
+          if (midWord === word) return mid;
+          if (midWord < word) left = mid + 1;
+          else right = mid - 1;
         }
-        return map;
+        return -1;
       }
 
-      function parseBigrams(text) {
-        const data = JSON.parse(text);
-        const map = new Map();
-        for (const [w1, w2, freq] of data) {
-          map.set(w1 + ' ' + w2, freq);
+      function unpackEntry(entry) {
+        if (version === 1) {
+          return { lemmaIdx: entry >>> 4, posCode: entry & 0xf };
         }
-        return map;
+        return {
+          lemmaIdx: entry >>> 10,
+          posCode: entry & 0xf,
+          caseCode: (entry >>> 4) & 0x7,
+          genderCode: (entry >>> 7) & 0x3,
+          numberCode: (entry >>> 9) & 0x1
+        };
       }
-
-      function parseUnigrams(text) {
-        const data = JSON.parse(text);
-        const map = new Map();
-        for (const [word, freq] of Object.entries(data)) {
-          map.set(word, freq);
-        }
-        return map;
-      }
-
-      // Content word POS tags - these should never be stopwords
-      // Excluding adverbs (ao) since many are function words (ekki, nú, svo, og)
-      const CONTENT_POS = new Set(['no', 'so', 'lo']);
 
       function lemmatize(word) {
         const normalized = word.toLowerCase();
-        const entries = lookup.get(normalized);
-        if (!entries) return [{ lemma: normalized, pos: '' }];
-        return entries.map(e => ({ lemma: lemmas[e.index], pos: e.pos }));
+        const idx = findWord(normalized);
+        if (idx === -1) return [{ lemma: normalized, pos: "" }];
+
+        const start = entryOffsets[idx];
+        const end = entryOffsets[idx + 1];
+        const seen = new Set();
+        const result = [];
+
+        for (let i = start; i < end; i++) {
+          const { lemmaIdx, posCode } = unpackEntry(entries[i]);
+          const lemma = getLemma(lemmaIdx);
+          const pos = CODE_TO_POS[posCode] || "";
+          const key = lemma + ":" + pos;
+          if (!seen.has(key)) {
+            seen.add(key);
+            result.push({ lemma, pos });
+          }
+        }
+        return result.length > 0 ? result : [{ lemma: normalized, pos: "" }];
       }
 
-      function getBigramFreq(w1, w2) {
-        return bigrams.get(w1 + ' ' + w2) || 0;
+      function lemmatizeWithMorph(word) {
+        const normalized = word.toLowerCase();
+        const idx = findWord(normalized);
+        if (idx === -1) return [{ lemma: normalized, pos: "", morph: {} }];
+
+        const start = entryOffsets[idx];
+        const end = entryOffsets[idx + 1];
+        const seen = new Set();
+        const result = [];
+
+        for (let i = start; i < end; i++) {
+          const unpacked = unpackEntry(entries[i]);
+          const lemma = getLemma(unpacked.lemmaIdx);
+          const pos = CODE_TO_POS[unpacked.posCode] || "";
+          const morph = {};
+          if (version === 2) {
+            if (unpacked.caseCode > 0) morph.case = CODE_TO_CASE[unpacked.caseCode];
+            if (unpacked.genderCode > 0) morph.gender = CODE_TO_GENDER[unpacked.genderCode];
+            morph.number = CODE_TO_NUMBER[unpacked.numberCode];
+          }
+          const key = lemma + ":" + pos + ":" + (morph.case || "") + ":" + (morph.gender || "");
+          if (!seen.has(key)) {
+            seen.add(key);
+            result.push({ lemma, pos, morph });
+          }
+        }
+        return result.length > 0 ? result : [{ lemma: normalized, pos: "", morph: {} }];
       }
 
-      function getUnigramFreq(w) {
-        return unigrams.get(w) || 0;
+      function findBigram(word1, word2) {
+        let left = 0;
+        let right = bigramCount - 1;
+        while (left <= right) {
+          const mid = (left + right) >>> 1;
+          const midW1 = getString(bigramW1Offsets[mid], bigramW1Lengths[mid]);
+          if (midW1 < word1) left = mid + 1;
+          else if (midW1 > word1) right = mid - 1;
+          else {
+            const midW2 = getString(bigramW2Offsets[mid], bigramW2Lengths[mid]);
+            if (midW2 === word2) return mid;
+            if (midW2 < word2) left = mid + 1;
+            else right = mid - 1;
+          }
+        }
+        return -1;
       }
 
-      // Compound splitting
-      const LINKING_LETTERS = ['s', 'u', 'a'];
-      const MIN_PART = 3;
+      function bigramFreq(word1, word2) {
+        const idx = findBigram(word1.toLowerCase(), word2.toLowerCase());
+        return idx === -1 ? 0 : bigramFreqs[idx];
+      }
+
+      function isContextualStopword(lemma, pos) {
+        const normalized = lemma.toLowerCase();
+        const rule = CONTEXTUAL_STOPWORDS.get(normalized);
+        if (rule && pos) return rule.has(pos);
+        return STOPWORDS.has(normalized);
+      }
+
+      function tryCompoundSplit(left, right) {
+        const leftLemmas = lemmatize(left);
+        const rightLemmas = lemmatize(right);
+        const leftKnown = [...new Set(leftLemmas.map(e => e.lemma).filter(l => knownLemmas.has(l)))];
+        const rightKnown = [...new Set(rightLemmas.map(e => e.lemma).filter(l => knownLemmas.has(l)))];
+
+        if (leftKnown.length === 0 || rightKnown.length === 0) return null;
+
+        let score = 0;
+        const balance = 1 - Math.abs(left.length - right.length) / (left.length + right.length);
+        score += balance * 0.2;
+        const avgLength = (left.length + right.length) / 2;
+        score += Math.min(avgLength / 6, 1) * 0.2;
+        if (rightKnown.some(l => COMMON_COMPOUND_TAILS.has(l))) score += 0.3;
+        if (left.length < 4 || right.length < 4) score -= 0.15;
+
+        return { leftParts: leftKnown, rightParts: rightKnown, score: Math.max(0, score) };
+      }
 
       function splitCompound(word) {
         const normalized = word.toLowerCase();
         if (normalized.length < MIN_PART * 2) return null;
 
-        let best = null;
+        const directLemmas = lemmatize(word);
+        const primaryLemma = directLemmas[0]?.lemma?.toLowerCase();
+        if (primaryLemma && PROTECTED_LEMMAS.has(primaryLemma)) return null;
+        if (PROTECTED_LEMMAS.has(normalized)) return null;
 
+        const isKnown = directLemmas.length > 0 && directLemmas[0].lemma.toLowerCase() !== normalized;
+        if (isKnown && directLemmas.length === 1 && normalized.length < 12) return null;
+
+        let best = null;
         for (let i = MIN_PART; i <= normalized.length - MIN_PART; i++) {
           const left = normalized.slice(0, i);
           const right = normalized.slice(i);
 
-          // Try direct split
-          const result = trySplit(left, right);
+          const result = tryCompoundSplit(left, right);
           if (result && (!best || result.score > best.score)) best = result;
 
-          // Try with linking letter removed
           for (const link of LINKING_LETTERS) {
             if (left.endsWith(link) && left.length > MIN_PART) {
               const trimmed = left.slice(0, -1);
-              const result = trySplit(trimmed, right);
+              const result = tryCompoundSplit(trimmed, right);
               if (result) {
                 result.score *= 0.95;
                 if (!best || result.score > best.score) best = result;
@@ -250,82 +712,118 @@
           }
         }
 
-        return best;
-      }
-
-      function trySplit(left, right) {
-        const leftLemmas = lemmatize(left).map(e => e.lemma);
-        const rightLemmas = lemmatize(right).map(e => e.lemma);
-
-        // Filter to known lemmas only
-        const leftKnown = [...new Set(leftLemmas.filter(l => knownLemmas.has(l)))];
-        const rightKnown = [...new Set(rightLemmas.filter(l => knownLemmas.has(l)))];
-
-        if (leftKnown.length === 0 || rightKnown.length === 0) return null;
-
-        const balance = 1 - Math.abs(left.length - right.length) / (left.length + right.length);
-        const lengthBonus = Math.min((left.length + right.length) / 10, 1);
-
-        return {
-          leftParts: leftKnown,
-          rightParts: rightKnown,
-          score: balance * 0.5 + lengthBonus * 0.5
-        };
+        if (!best || best.score < 0.3) return null;
+        const compoundLemma = primaryLemma || normalized;
+        return [...new Set([...best.leftParts, ...best.rightParts, compoundLemma])];
       }
 
       function disambiguate(word, prevWord, nextWord) {
-        const entries = lemmatize(word);
-        const candidateLemmas = entries.map(e => e.lemma);
+        const morphEntries = lemmatizeWithMorph(word);
+        const candidates = morphEntries.map(e => ({ lemma: e.lemma, pos: e.pos }));
+        const allCandidateLemmas = [...new Set(candidates.map(c => c.lemma))];
 
-        if (entries.length === 1) {
+        if (morphEntries.length === 1) {
           return {
-            lemma: entries[0].lemma,
-            pos: entries[0].pos,
-            candidates: candidateLemmas,
-            confidence: 1.0
+            lemma: morphEntries[0].lemma,
+            pos: morphEntries[0].pos,
+            candidates,
+            allCandidateLemmas,
+            confidence: 1.0,
+            rule: "unambiguous",
+            rejected: []
           };
         }
 
-        const scores = entries.map(entry => {
+        // Rule 1: Noun after preposition with governed case
+        if (prevWord) {
+          const prevLemmas = lemmatize(prevWord);
+          const prepCandidate = prevLemmas.find(l => l.pos === "fs");
+          if (prepCandidate) {
+            const hasPronounReading = prevLemmas.some(l => l.pos === "fn");
+            const hasVerbCandidate = morphEntries.some(e => e.pos === "so");
+
+            if (!(hasPronounReading && hasVerbCandidate)) {
+              const governedCases = PREPOSITION_CASES.get(prepCandidate.lemma);
+              if (governedCases) {
+                const nounCandidates = morphEntries.filter(e => e.pos === "no");
+                for (const noun of nounCandidates) {
+                  if (noun.morph?.case && governedCases.has(noun.morph.case)) {
+                    const rejected = allCandidateLemmas.filter(l => l !== noun.lemma);
+                    return {
+                      lemma: noun.lemma,
+                      pos: noun.pos,
+                      candidates,
+                      allCandidateLemmas,
+                      confidence: 0.9,
+                      rule: "grammar:prep+" + noun.morph.case,
+                      rejected
+                    };
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Rule 2: Pronoun + verb
+        if (prevWord && NOMINATIVE_PRONOUNS.has(prevWord.toLowerCase())) {
+          const verbCandidates = morphEntries.filter(e => e.pos === "so");
+          if (verbCandidates.length > 0) {
+            const hasNonVerb = morphEntries.some(e => e.pos !== "so");
+            if (hasNonVerb) {
+              const verb = verbCandidates.find(v => v.lemma === "eiga") || verbCandidates[0];
+              const rejected = allCandidateLemmas.filter(l => l !== verb.lemma);
+              return {
+                lemma: verb.lemma,
+                pos: verb.pos,
+                candidates,
+                allCandidateLemmas,
+                confidence: 0.85,
+                rule: "grammar:pron+verb",
+                rejected
+              };
+            }
+          }
+        }
+
+        // Fallback to bigram scoring
+        const scores = morphEntries.map(entry => {
           let bigramScore = 0;
           if (prevWord) {
             for (const prev of lemmatize(prevWord)) {
-              const freq = getBigramFreq(prev.lemma, entry.lemma);
+              const freq = bigramFreq(prev.lemma, entry.lemma);
               if (freq > 0) bigramScore += Math.log(freq + 1);
             }
           }
           if (nextWord) {
             for (const next of lemmatize(nextWord)) {
-              const freq = getBigramFreq(entry.lemma, next.lemma);
+              const freq = bigramFreq(entry.lemma, next.lemma);
               if (freq > 0) bigramScore += Math.log(freq + 1);
             }
           }
-          const unigramScore = Math.log(getUnigramFreq(entry.lemma) + 1);
-          return { lemma: entry.lemma, pos: entry.pos, bigramScore, unigramScore };
+          return { ...entry, bigramScore };
         });
 
-        scores.sort((a, b) => {
-          if (a.bigramScore !== b.bigramScore) return b.bigramScore - a.bigramScore;
-          return b.unigramScore - a.unigramScore;
-        });
-
+        scores.sort((a, b) => b.bigramScore - a.bigramScore);
         const hasBigram = scores[0].bigramScore > 0;
-        let confidence = hasBigram ? 0.9 : 0.6;
+        const rejected = allCandidateLemmas.filter(l => l !== scores[0].lemma);
 
         return {
           lemma: scores[0].lemma,
           pos: scores[0].pos,
-          candidates: candidateLemmas,
-          confidence
+          candidates,
+          allCandidateLemmas,
+          confidence: hasBigram ? 0.9 : 0.6,
+          rule: hasBigram ? "bigram" : "fallback",
+          rejected
         };
       }
 
-      function processText(text, removeStopwords) {
+      function processText(text) {
         const tokens = text.split(/\\s+/).filter(t => t.length > 0);
         const words = [];
-
         for (const token of tokens) {
-          const cleaned = token.replace(/^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$/gu, '');
+          const cleaned = token.replace(/^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$/gu, "");
           if (cleaned) words.push(cleaned);
         }
 
@@ -335,31 +833,29 @@
           const prev = i > 0 ? words[i - 1] : null;
           const next = i < words.length - 1 ? words[i + 1] : null;
 
-          const { lemma, pos, candidates, confidence } = disambiguate(word, prev, next);
-          // Only mark as stopword if it's a function word (not noun/verb/adj/adv)
-          const isStopword = STOPWORDS.has(lemma) && !CONTENT_POS.has(pos);
+          const disambResult = disambiguate(word, prev, next);
+          const isStopword = isContextualStopword(disambResult.lemma, disambResult.pos);
 
-          // Try compound splitting for unknown words
+          // Try compound splitting
+          let compoundParts = null;
           const entries = lemmatize(word);
           const isUnknown = entries.length === 1 && entries[0].lemma === word.toLowerCase();
-
-          let compoundParts = null;
-          if (isUnknown) {
-            const split = splitCompound(word);
-            if (split) {
-              // Include all variant lemmas from both parts, plus original word
-              compoundParts = [...new Set([...split.leftParts, ...split.rightParts, word.toLowerCase()])];
-            }
+          if (isUnknown || word.length >= 12) {
+            compoundParts = splitCompound(word);
           }
 
           results.push({
             word,
-            lemma,
-            pos,
-            candidates,
-            confidence,
+            lemma: disambResult.lemma,
+            pos: disambResult.pos,
+            posName: POS_NAMES[disambResult.pos] || "",
+            candidates: disambResult.candidates,
+            allCandidateLemmas: disambResult.allCandidateLemmas,
+            confidence: disambResult.confidence,
+            rule: disambResult.rule,
+            rejected: disambResult.rejected,
             isStopword,
-            isAmbiguous: candidates.length > 1,
+            isAmbiguous: disambResult.candidates.length > 1,
             compoundParts
           });
         }
@@ -370,116 +866,227 @@
       self.onmessage = async function(e) {
         const { type, payload } = e.data;
 
-        if (type === 'load') {
+        if (type === "load") {
           try {
-            const baseUrl = payload.baseUrl;
+            const url = payload.url;
 
-            self.postMessage({ type: 'progress', payload: { step: 'lemmas', percent: 0 } });
-            const lemmasText = await loadFile(baseUrl + 'lemmas.txt.gz');
-            lemmas = lemmasText.split('\\n').filter(l => l.length > 0);
-            knownLemmas = new Set(lemmas.map(l => l.toLowerCase()));
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("Failed to load: " + response.status);
 
-            self.postMessage({ type: 'progress', payload: { step: 'lookup', percent: 25 } });
-            const lookupText = await loadFile(baseUrl + 'lookup.tsv.gz');
-            lookup = parseLookup(lookupText);
+            const contentLength = response.headers.get("content-length");
+            const total = contentLength ? parseInt(contentLength, 10) : 91 * 1024 * 1024;
 
-            self.postMessage({ type: 'progress', payload: { step: 'bigrams', percent: 50 } });
-            const bigramsText = await loadFile(baseUrl + 'bigrams.json.gz');
-            bigrams = parseBigrams(bigramsText);
+            const reader = response.body.getReader();
+            const chunks = [];
+            let loaded = 0;
 
-            self.postMessage({ type: 'progress', payload: { step: 'unigrams', percent: 75 } });
-            const unigramsText = await loadFile(baseUrl + 'unigrams.json.gz');
-            unigrams = parseUnigrams(unigramsText);
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              chunks.push(value);
+              loaded += value.length;
+              self.postMessage({
+                type: "progress",
+                payload: { loaded, total, percent: Math.round((loaded / total) * 100) }
+              });
+            }
+
+            buffer = new ArrayBuffer(loaded);
+            const view = new Uint8Array(buffer);
+            let offset = 0;
+            for (const chunk of chunks) {
+              view.set(chunk, offset);
+              offset += chunk.length;
+            }
+
+            const dv = new DataView(buffer);
+            const magic = dv.getUint32(0, true);
+            if (magic !== MAGIC) {
+              throw new Error("Invalid binary format: expected LEMA magic");
+            }
+
+            version = dv.getUint32(4, true);
+            if (version !== 1 && version !== 2) {
+              throw new Error("Unsupported version: " + version);
+            }
+
+            const stringPoolSize = dv.getUint32(8, true);
+            lemmaCount = dv.getUint32(12, true);
+            wordCount = dv.getUint32(16, true);
+            const entryCount = dv.getUint32(20, true);
+            bigramCount = dv.getUint32(24, true);
+
+            offset = 32;
+            stringPool = new Uint8Array(buffer, offset, stringPoolSize);
+            offset += stringPoolSize;
+
+            lemmaOffsets = new Uint32Array(buffer, offset, lemmaCount);
+            offset += lemmaCount * 4;
+            lemmaLengths = new Uint8Array(buffer, offset, lemmaCount);
+            offset += lemmaCount;
+            offset = (offset + 3) & ~3;
+
+            wordOffsets = new Uint32Array(buffer, offset, wordCount);
+            offset += wordCount * 4;
+            wordLengths = new Uint8Array(buffer, offset, wordCount);
+            offset += wordCount;
+            offset = (offset + 3) & ~3;
+
+            entryOffsets = new Uint32Array(buffer, offset, wordCount + 1);
+            offset += (wordCount + 1) * 4;
+            entries = new Uint32Array(buffer, offset, entryCount);
+            offset += entryCount * 4;
+
+            bigramW1Offsets = new Uint32Array(buffer, offset, bigramCount);
+            offset += bigramCount * 4;
+            bigramW1Lengths = new Uint8Array(buffer, offset, bigramCount);
+            offset += bigramCount;
+            offset = (offset + 3) & ~3;
+
+            bigramW2Offsets = new Uint32Array(buffer, offset, bigramCount);
+            offset += bigramCount * 4;
+            bigramW2Lengths = new Uint8Array(buffer, offset, bigramCount);
+            offset += bigramCount;
+            offset = (offset + 3) & ~3;
+
+            bigramFreqs = new Uint32Array(buffer, offset, bigramCount);
+
+            knownLemmas = new Set();
+            for (let i = 0; i < lemmaCount; i++) {
+              knownLemmas.add(getLemma(i).toLowerCase());
+            }
 
             self.postMessage({
-              type: 'ready',
+              type: "ready",
               payload: {
-                lemmaCount: lemmas.length,
-                wordFormCount: lookup.size,
-                bigramCount: bigrams.size,
-                unigramCount: unigrams.size
+                lemmaCount,
+                wordFormCount: wordCount,
+                bigramCount,
+                bufferSize: buffer.byteLength,
+                version
               }
             });
           } catch (err) {
-            self.postMessage({ type: 'error', payload: err.message });
+            self.postMessage({ type: "error", payload: err.message });
           }
         }
 
-        if (type === 'process') {
-          const results = processText(payload.text, payload.removeStopwords);
-          self.postMessage({ type: 'results', payload: results });
+        if (type === "process") {
+          const results = processText(payload.text);
+          self.postMessage({ type: "results", payload: results });
         }
       };
     `;
 
-    // Create worker from inline code
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    // Create worker
+    const blob = new Blob([workerCode], { type: "application/javascript" });
     const worker = new Worker(URL.createObjectURL(blob));
 
     // State
     let isReady = false;
     let stats = null;
+    let currentResults = [];
+    let activeTab = "flow";
 
     // UI elements
-    const app = document.getElementById('app');
-    const subtitle = document.getElementById('subtitle');
-    const statusEl = document.getElementById('status');
-    const progressEl = document.getElementById('progress');
-
-    const STEP_LABELS = {
-      lemmas: 'Loading lemmas (1.4 MB)...',
-      lookup: 'Loading word forms (11 MB)...',
-      bigrams: 'Loading bigrams (2.9 MB)...',
-      unigrams: 'Loading unigrams (1.9 MB)...'
-    };
+    const app = document.getElementById("app");
+    const statusEl = document.getElementById("status");
+    const progressEl = document.getElementById("progress");
+    const progressTextEl = document.getElementById("progress-text");
 
     // Worker message handler
     worker.onmessage = function(e) {
       const { type, payload } = e.data;
 
-      if (type === 'progress') {
-        statusEl.textContent = STEP_LABELS[payload.step] || payload.step;
-        progressEl.style.width = payload.percent + '%';
+      if (type === "progress") {
+        const mb = (payload.loaded / (1024 * 1024)).toFixed(1);
+        const totalMb = (payload.total / (1024 * 1024)).toFixed(0);
+        statusEl.textContent = "Downloading dictionary...";
+        progressEl.style.width = payload.percent + "%";
+        progressTextEl.textContent = mb + " MB / " + totalMb + " MB";
       }
 
-      if (type === 'ready') {
+      if (type === "ready") {
         isReady = true;
         stats = payload;
-        progressEl.style.width = '100%';
-        subtitle.textContent = `${stats.lemmaCount.toLocaleString()} lemmas, ${stats.wordFormCount.toLocaleString()} word forms, ${stats.bigramCount.toLocaleString()} bigrams`;
         renderUI();
       }
 
-      if (type === 'error') {
+      if (type === "error") {
         app.innerHTML = '<div class="error"><strong>Error:</strong> ' + payload +
-          '<br><br>Make sure data files exist in data-dist/ and serve via HTTP.</div>';
+          '<br><br>Make sure data-dist/lemma-is.bin exists and you\'re serving via HTTP (not file://).</div>';
       }
 
-      if (type === 'results') {
-        renderResults(payload);
+      if (type === "results") {
+        currentResults = payload;
+        renderResults();
       }
     };
 
     function renderUI() {
-      const exampleText = `Börnin fóru með mömmu sinni að skoða ána. Þau sáu fugla og fiska og voru sátt við ferðina. Borgarstjóri Reykjavíkur boðaði til fundar um persónuupplýsingar og húsnæðislánareglur.`;
+      const sizeMb = (stats.bufferSize / (1024 * 1024)).toFixed(1);
+      const exampleText = `Börnin fóru með mömmu sinni að skoða ána. Borgarstjóri Reykjavíkur boðaði til fundar um persónuupplýsingar og húsnæðislánareglur.`;
 
       app.innerHTML = `
-        <textarea id="input" placeholder="Sláðu inn íslensku...">${exampleText}</textarea>
-        <div class="controls">
-          <label>
-            <input type="checkbox" id="filterStopwords">
-            Remove stopwords
-          </label>
+        <div class="data-stats">
+          <div class="stat">
+            <span class="stat-value">${stats.lemmaCount.toLocaleString()}</span>
+            <span class="stat-label">lemmas</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value">${stats.wordFormCount.toLocaleString()}</span>
+            <span class="stat-label">word forms</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value">${stats.bigramCount.toLocaleString()}</span>
+            <span class="stat-label">bigrams</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value">${sizeMb}</span>
+            <span class="stat-label">MB loaded</span>
+          </div>
         </div>
-        <div class="output">
-          <h3>Index Terms</h3>
-          <div class="lemmas" id="lemmas"><span class="hint">Type some Icelandic text above...</span></div>
-          <div class="stats" id="stats"></div>
+
+        <textarea id="input" placeholder="Sláðu inn íslensku...">${exampleText}</textarea>
+
+        <div class="results-panel">
+          <div class="panel-header">
+            <h3>Analysis</h3>
+            <div class="controls">
+              <label><input type="checkbox" id="filterStopwords"> Hide stopwords</label>
+              <label><input type="checkbox" id="showDetails" checked> Show details</label>
+            </div>
+          </div>
+          <div class="panel-content">
+            <div class="metrics" id="metrics"></div>
+            <div class="tabs">
+              <button class="tab active" data-tab="flow">Word Flow</button>
+              <button class="tab" data-tab="index">Index Terms</button>
+              <button class="tab" data-tab="ejections">Ejections</button>
+              <button class="tab" data-tab="expansions">Expansions</button>
+            </div>
+            <div id="tab-flow" class="tab-content active"></div>
+            <div id="tab-index" class="tab-content"></div>
+            <div id="tab-ejections" class="tab-content"></div>
+            <div id="tab-expansions" class="tab-content"></div>
+          </div>
         </div>
       `;
 
-      const input = document.getElementById('input');
-      const filterCheckbox = document.getElementById('filterStopwords');
+      const input = document.getElementById("input");
+      const filterCheckbox = document.getElementById("filterStopwords");
+      const detailsCheckbox = document.getElementById("showDetails");
+
+      // Tab switching
+      document.querySelectorAll(".tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+          document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+          tab.classList.add("active");
+          activeTab = tab.dataset.tab;
+          document.getElementById("tab-" + activeTab).classList.add("active");
+        });
+      });
 
       let debounceTimer = null;
       function scheduleProcess() {
@@ -487,74 +1094,192 @@
         debounceTimer = setTimeout(() => {
           const text = input.value.trim();
           if (text) {
-            worker.postMessage({
-              type: 'process',
-              payload: { text, removeStopwords: filterCheckbox.checked }
-            });
+            worker.postMessage({ type: "process", payload: { text } });
           } else {
-            document.getElementById('lemmas').innerHTML = '<span class="hint">Type some Icelandic text above...</span>';
-            document.getElementById('stats').textContent = '';
+            currentResults = [];
+            renderResults();
           }
         }, 150);
       }
 
-      input.addEventListener('input', scheduleProcess);
-      filterCheckbox.addEventListener('change', scheduleProcess);
-
-      // Process the example text immediately
+      input.addEventListener("input", scheduleProcess);
+      filterCheckbox.addEventListener("change", renderResults);
+      detailsCheckbox.addEventListener("change", renderResults);
       scheduleProcess();
     }
 
-    function renderResults(results) {
-      const lemmasDiv = document.getElementById('lemmas');
-      const statsDiv = document.getElementById('stats');
-      const filterStopwords = document.getElementById('filterStopwords').checked;
+    function renderResults() {
+      const filterStopwords = document.getElementById("filterStopwords")?.checked ?? false;
+      const showDetails = document.getElementById("showDetails")?.checked ?? true;
 
-      const uniqueLemmas = new Set();
+      if (currentResults.length === 0) {
+        document.getElementById("metrics").innerHTML = "";
+        document.getElementById("tab-flow").innerHTML = '<span class="hint">Type some Icelandic text above...</span>';
+        document.getElementById("tab-index").innerHTML = "";
+        document.getElementById("tab-ejections").innerHTML = "";
+        document.getElementById("tab-expansions").innerHTML = "";
+        return;
+      }
+
+      // Calculate metrics
+      const indexedLemmas = new Set();
+      const compoundExpansions = [];
+      const ejections = [];
       let stopwordCount = 0;
-      let ambiguousCount = 0;
-      let compoundCount = 0;
 
-      const html = results.map(r => {
+      currentResults.forEach(r => {
         if (r.isStopword) {
           stopwordCount++;
-          if (filterStopwords) return '';
-          return '<span class="lemma stopword" title="' + r.word + ' (stopword)">' + r.lemma + '</span>';
+          if (!filterStopwords) indexedLemmas.add(r.lemma);
+        } else if (r.compoundParts) {
+          r.compoundParts.forEach(p => indexedLemmas.add(p));
+          compoundExpansions.push({ word: r.word, parts: r.compoundParts });
+        } else {
+          indexedLemmas.add(r.lemma);
         }
 
-        // Handle compound words
-        if (r.compoundParts) {
-          compoundCount++;
-          r.compoundParts.forEach(p => uniqueLemmas.add(p));
-          const title = r.word + ' → indexed as: ' + r.compoundParts.join(', ');
-          return '<span class="lemma compound" title="' + title + '">' + r.compoundParts.join(', ') + '</span>';
+        if (r.rejected && r.rejected.length > 0) {
+          ejections.push({
+            word: r.word,
+            chosen: r.lemma,
+            rejected: r.rejected,
+            rule: r.rule
+          });
         }
+      });
 
-        uniqueLemmas.add(r.lemma);
-        if (r.isAmbiguous) ambiguousCount++;
+      // Render metrics
+      const metricsHtml = `
+        <div class="metric indexed">
+          <div class="metric-value">${indexedLemmas.size}</div>
+          <div class="metric-label">indexed terms</div>
+        </div>
+        <div class="metric expanded">
+          <div class="metric-value">+${compoundExpansions.reduce((sum, e) => sum + e.parts.length - 1, 0)}</div>
+          <div class="metric-label">from compounds</div>
+        </div>
+        <div class="metric rejected">
+          <div class="metric-value">-${ejections.reduce((sum, e) => sum + e.rejected.length, 0)}</div>
+          <div class="metric-label">ejected</div>
+        </div>
+        ${filterStopwords ? `
+        <div class="metric stopwords">
+          <div class="metric-value">-${stopwordCount}</div>
+          <div class="metric-label">stopwords</div>
+        </div>` : ""}
+      `;
+      document.getElementById("metrics").innerHTML = metricsHtml;
 
-        const cls = r.isAmbiguous ? 'lemma ambiguous' : 'lemma';
-        const conf = Math.round(r.confidence * 100);
-        const posLabel = r.pos ? ' [' + r.pos + ']' : '';
-        const title = r.isAmbiguous
-          ? r.word + ' → ' + r.lemma + posLabel + ' (candidates: ' + r.candidates.join(', ') + ', ' + conf + '% confidence)'
-          : r.word + ' → ' + r.lemma + posLabel;
+      // Render Word Flow tab
+      const flowHtml = currentResults
+        .filter(r => !filterStopwords || !r.isStopword)
+        .map(r => {
+          let cardClass = "word-card";
+          if (r.isStopword) cardClass += " stopword";
+          else if (r.compoundParts) cardClass += " compound";
+          else if (r.isAmbiguous) cardClass += " disambiguated";
 
-        return '<span class="' + cls + '" title="' + title + '">' + r.lemma + '</span>';
-      }).join('');
+          let resultHtml = "";
 
-      lemmasDiv.innerHTML = html || '<span class="hint">No content words found</span>';
+          if (r.compoundParts) {
+            // Compound word - show all parts
+            const parts = r.compoundParts.map(p =>
+              `<span class="word-lemma compound-part">${escapeHtml(p)}</span>`
+            ).join('<span class="compound-plus">+</span>');
+            resultHtml = `
+              <div class="compound-breakdown">${parts}</div>
+              <span class="word-badge badge-compound">compound</span>
+            `;
+          } else {
+            // Single lemma with potential disambiguation
+            resultHtml = `<span class="word-lemma">${escapeHtml(r.lemma)}</span>`;
 
-      const parts = [results.length + ' words', uniqueLemmas.size + ' unique lemmas'];
-      if (ambiguousCount > 0) parts.push(ambiguousCount + ' disambiguated');
-      if (compoundCount > 0) parts.push(compoundCount + ' compounds split');
-      if (filterStopwords && stopwordCount > 0) parts.push(stopwordCount + ' stopwords removed');
-      statsDiv.textContent = parts.join(' · ');
+            if (showDetails && r.posName) {
+              resultHtml += `<span class="word-pos">${r.posName}</span>`;
+            }
+
+            if (r.isStopword) {
+              resultHtml += `<span class="word-badge badge-stopword">stopword</span>`;
+            } else if (showDetails && r.rejected && r.rejected.length > 0) {
+              resultHtml += r.rejected.map(rej =>
+                `<span class="word-rejected">${escapeHtml(rej)}</span>`
+              ).join("");
+
+              // Show rule badge
+              let badgeClass = "badge-fallback";
+              let badgeText = r.rule;
+              if (r.rule.startsWith("grammar:")) {
+                badgeClass = "badge-grammar";
+                badgeText = r.rule.replace("grammar:", "");
+              } else if (r.rule === "bigram") {
+                badgeClass = "badge-bigram";
+              }
+              resultHtml += `<span class="word-badge ${badgeClass}">${badgeText}</span>`;
+            }
+          }
+
+          return `
+            <div class="${cardClass}">
+              <span class="word-original">${escapeHtml(r.word)}</span>
+              <span class="word-arrow">\u2192</span>
+              <div class="word-result">${resultHtml}</div>
+            </div>
+          `;
+        }).join("");
+
+      document.getElementById("tab-flow").innerHTML = flowHtml || '<span class="hint">No words to display</span>';
+
+      // Render Index Terms tab
+      const indexHtml = `
+        <div class="index-terms">
+          ${[...indexedLemmas].sort().map(lemma => {
+            const isFromCompound = compoundExpansions.some(e => e.parts.includes(lemma) && e.parts.length > 1);
+            return `<span class="index-term${isFromCompound ? " from-compound" : ""}">${escapeHtml(lemma)}</span>`;
+          }).join("")}
+        </div>
+      `;
+      document.getElementById("tab-index").innerHTML = indexHtml;
+
+      // Render Ejections tab
+      const ejectionsHtml = ejections.length === 0
+        ? '<span class="hint">No disambiguation ejections</span>'
+        : `<div class="ejection-list">
+            ${ejections.map(e => `
+              <div class="ejection-item">
+                <span class="ejection-word">${escapeHtml(e.word)}</span>
+                <span class="ejection-chosen">${escapeHtml(e.chosen)}</span>
+                <span class="ejection-vs">beats</span>
+                ${e.rejected.map(r => `<span class="ejection-rejected">${escapeHtml(r)}</span>`).join(" ")}
+                <span class="ejection-reason">${e.rule}</span>
+              </div>
+            `).join("")}
+          </div>`;
+      document.getElementById("tab-ejections").innerHTML = ejectionsHtml;
+
+      // Render Expansions tab
+      const expansionsHtml = compoundExpansions.length === 0
+        ? '<span class="hint">No compound expansions</span>'
+        : `<div class="expansion-list">
+            ${compoundExpansions.map(e => `
+              <div class="expansion-item">
+                <span class="expansion-word">${escapeHtml(e.word)}</span>
+                <span class="word-arrow">\u2192</span>
+                <div class="expansion-parts">
+                  ${e.parts.map(p => `<span class="expansion-part">${escapeHtml(p)}</span>`).join('<span class="expansion-plus">+</span>')}
+                </div>
+              </div>
+            `).join("")}
+          </div>`;
+      document.getElementById("tab-expansions").innerHTML = expansionsHtml;
     }
 
-    // Start loading - resolve to absolute URL for blob worker
-    const baseUrl = new URL('./data-dist/', location.href).href;
-    worker.postMessage({ type: 'load', payload: { baseUrl } });
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    // Start loading
+    const binUrl = new URL("./data-dist/lemma-is.bin", location.href).href;
+    worker.postMessage({ type: "load", payload: { url: binUrl } });
   </script>
 </body>
 </html>
