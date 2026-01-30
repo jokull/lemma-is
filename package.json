@@ -24,7 +24,6 @@
   },
   "files": [
     "dist",
-    "data-dist/lemma-is.bin",
     "data-dist/lemma-is.core.bin",
     "README.md"
   ],

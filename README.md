@@ -183,11 +183,13 @@ The full binary targets Node.js servers where data loads once at startup. Not re
 
 For browser apps, use the **core** binary.
 
-To load the full binary:
+To use the full binary, build it locally:
 
-```typescript
-const buffer = readFileSync("node_modules/lemma-is/data-dist/lemma-is.bin");
+```bash
+pnpm build:binary
 ```
+
+Then load it from `data-dist/lemma-is.bin`.
 
 ### Compact Builds (Browser/Edge)
 
