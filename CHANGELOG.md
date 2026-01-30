@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-01-30
+
+### Added
+
+- Core binary build (~9–11 MB) for browser/edge use: `data-dist/lemma-is.core.bin`
+- Core sweep/eval tools to quantify size vs recall tradeoffs (`scripts/benchmark/core-sweep.ts`, `scripts/benchmark/core-eval.ts`)
+
+### Changed
+
+- Core binary is now the default in docs and demo; full binary remains available
+- `build:core` now generates the ~20 MB memory target core pack (top 350k word forms)
+- Pipeline now caches lemmas per pass to avoid repeated lookups
+- Bench scripts accept `LEMMA_IS_DATA` to compare core/full binaries
+
+### Removed
+
+- `usePhraseRules` option (no-op placeholder)
+
 ## [0.3.0] - 2025-01-30
 
 ### Added

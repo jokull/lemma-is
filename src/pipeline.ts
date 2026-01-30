@@ -50,6 +50,8 @@ export interface ProcessedToken {
   confidence?: number;
   /** Compound split result if applicable */
   compoundSplit?: CompoundSplit;
+  /** Lemmas derived from compound parts (if any) */
+  compoundLemmas?: string[];
 }
 
 /**
@@ -113,6 +115,16 @@ export function processText(
   // Step 2: Process each token
   const results: ProcessedToken[] = [];
   const wordTokens: { index: number; token: Token }[] = [];
+  const lemmaCache = new Map<string, string[]>();
+
+  const getLemmas = (raw: string): string[] => {
+    const key = raw.toLowerCase();
+    const cached = lemmaCache.get(key);
+    if (cached) return cached;
+    const lemmas = lemmatizer.lemmatize(raw);
+    lemmaCache.set(key, lemmas);
+    return lemmas;
+  };
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
@@ -149,7 +161,7 @@ export function processText(
     // Handle word tokens
     if (LEMMATIZABLE_KINDS.has(token.kind)) {
       const tokenText = token.text ?? "";
-      const lemmas = lemmatizer.lemmatize(tokenText);
+      const lemmas = getLemmas(tokenText);
 
       const processed: ProcessedToken = {
         original: tokenText,
@@ -167,7 +179,8 @@ export function processText(
         if (split.isCompound) {
           processed.compoundSplit = split;
           // Add component lemmas from parts (in addition to direct lemmas)
-          const partLemmas = split.parts.flatMap((c) => lemmatizer.lemmatize(c));
+          const partLemmas = split.parts.flatMap((c) => getLemmas(c));
+          processed.compoundLemmas = partLemmas;
           processed.lemmas = [...new Set([...lemmas, ...partLemmas])];
         }
       }
@@ -198,7 +211,11 @@ export function processText(
       const result = disambiguator.disambiguate(
         token.text ?? "",
         prevToken?.text ?? null,
-        nextToken?.text ?? null
+        nextToken?.text ?? null,
+        {
+          prevLemmas: prevToken?.text ? getLemmas(prevToken.text) : undefined,
+          nextLemmas: nextToken?.text ? getLemmas(nextToken.text) : undefined,
+        }
       );
 
       results[index].disambiguated = result.lemma;
@@ -278,14 +295,14 @@ export function extractIndexableLemmas(
 
     // Also add compound parts if split
     if (token.compoundSplit?.isCompound) {
-      for (const part of token.compoundSplit.parts) {
-        const partLemmas = lemmatizer.lemmatize(part);
-        for (const lemma of partLemmas) {
+      const partLemmas = token.compoundLemmas
+        ? token.compoundLemmas
+        : token.compoundSplit.parts.flatMap((p) => lemmatizer.lemmatize(p));
+      for (const lemma of partLemmas) {
           if (!shouldFilter(lemma)) {
             lemmas.add(lemma);
           }
         }
-      }
     }
   }
 

@@ -68,6 +68,7 @@ Simplified packing:
   packed = lemmaIdx << 9 | number << 8 | gender << 6 | case << 4 | pos
 """
 
+import argparse
 import csv
 import gzip
 import json
@@ -83,7 +84,7 @@ BIGRAMS_FILE = DIST_DIR / "bigrams.json.gz"
 OUTPUT_FILE = DIST_DIR / "lemma-is.bin"
 
 MAGIC = 0x4C454D41  # "LEMA" in little-endian
-VERSION = 2  # Version 2 adds case/gender/number
+VERSION = 2  # Version 2 adds case/gender/number; may be overridden via CLI
 
 # POS code mapping (same as build-data.py)
 POS_MAP = {
@@ -221,7 +222,56 @@ def load_bigrams():
         return json.load(f)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Build lemma-is binary data file")
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=str(OUTPUT_FILE),
+        help="Output file path",
+    )
+    parser.add_argument(
+        "--top-words",
+        type=int,
+        default=None,
+        help="Keep only top N word forms by unigram frequency",
+    )
+    parser.add_argument(
+        "--min-freq",
+        type=int,
+        default=None,
+        help="Keep only word forms with unigram frequency >= MIN",
+    )
+    parser.add_argument(
+        "--no-bigrams",
+        action="store_true",
+        help="Exclude bigram data from the binary",
+    )
+    parser.add_argument(
+        "--no-morph",
+        action="store_true",
+        help="Exclude morph features (build version 1 format)",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
+    output_path = Path(args.output)
+    include_bigrams = not args.no_bigrams
+    include_morph = not args.no_morph
+    version = 2 if include_morph else 1
+
+    print("Build options:")
+    print(f"  Output: {output_path}")
+    print(f"  Version: {version} ({'morph' if include_morph else 'no morph'})")
+    print(f"  Bigrams: {'yes' if include_bigrams else 'no'}")
+    if args.top_words:
+        print(f"  Top words: {args.top_words:,}")
+    if args.min_freq:
+        print(f"  Min freq: {args.min_freq:,}")
+
     if not SRC_FILE.exists():
         print(f"Error: {SRC_FILE} not found")
         return 1
@@ -230,9 +280,13 @@ def main():
     unigram_freqs = load_unigram_frequencies()
     print(f"  Loaded {len(unigram_freqs):,} frequencies")
 
-    print("Loading bigrams...")
-    bigrams_data = load_bigrams()
-    print(f"  Loaded {len(bigrams_data):,} bigrams")
+    if include_bigrams:
+        print("Loading bigrams...")
+        bigrams_data = load_bigrams()
+        print(f"  Loaded {len(bigrams_data):,} bigrams")
+    else:
+        bigrams_data = []
+        print("Skipping bigram data")
 
     print(f"Reading {SRC_FILE}...")
     # word -> set of (lemma, pos, case, gender, number) tuples
@@ -260,6 +314,28 @@ def main():
                 print(f"  Processed {i:,} rows...")
 
     print(f"  Total word forms: {len(word_to_lemma_morph):,}")
+
+    # Optional word filtering for smaller core builds
+    if args.top_words or args.min_freq:
+        print("Filtering words by frequency...")
+        items = []
+        for word in word_to_lemma_morph.keys():
+            freq = unigram_freqs.get(word, 0)
+            items.append((freq, word))
+
+        if args.min_freq is not None:
+            items = [item for item in items if item[0] >= args.min_freq]
+
+        items.sort(key=lambda x: (-x[0], x[1]))
+
+        if args.top_words is not None:
+            items = items[: args.top_words]
+
+        selected_words = {word for _, word in items}
+        word_to_lemma_morph = {
+            word: word_to_lemma_morph[word] for word in selected_words
+        }
+        print(f"  Kept word forms: {len(word_to_lemma_morph):,}")
 
     # Build unique lemma list sorted by frequency
     all_lemmas = set()
@@ -337,7 +413,7 @@ def main():
 
     print(f"  String pool size: {len(string_pool):,} bytes (aligned)")
 
-    # Build entry data (lemma index + POS + morph packed)
+    # Build entry data (lemma index + POS + optional morph packed)
     print("Building entry data...")
     all_entries = []
     entry_offsets = [0]  # Start offset for each word's entries
@@ -345,49 +421,67 @@ def main():
     for word in sorted_words:
         lemma_morph_set = word_to_lemma_morph[word]
 
-        # Sort by frequency
-        def sort_key(lm):
-            lemma, pos, case, gender, number = lm
-            freq = unigram_freqs.get(lemma, 0)
-            return (-freq, lemma, pos, case, gender, number)
+        if include_morph:
+            # Sort by frequency
+            def sort_key(lm):
+                lemma, pos, case, gender, number = lm
+                freq = unigram_freqs.get(lemma, 0)
+                return (-freq, lemma, pos, case, gender, number)
 
-        sorted_entries = sorted(lemma_morph_set, key=sort_key)
+            sorted_entries = sorted(lemma_morph_set, key=sort_key)
 
-        for lemma, pos, case, gender, number in sorted_entries:
-            lemma_idx = lemma_to_idx[lemma]
-            pos_code = POS_TO_CODE.get(pos, 10)  # 10 = unknown
-            case_code = CASE_TO_CODE.get(case, 0)
-            gender_code = GENDER_TO_CODE.get(gender, 0)
-            number_code = NUMBER_TO_CODE.get(number, 0)
+            for lemma, pos, case, gender, number in sorted_entries:
+                lemma_idx = lemma_to_idx[lemma]
+                pos_code = POS_TO_CODE.get(pos, 10)  # 10 = unknown
+                case_code = CASE_TO_CODE.get(case, 0)
+                gender_code = GENDER_TO_CODE.get(gender, 0)
+                number_code = NUMBER_TO_CODE.get(number, 0)
 
-            # Pack into u32:
-            # bits 0-3:   pos (4 bits, values 0-15)
-            # bits 4-6:   case (3 bits, values 0-4)
-            # bits 7-8:   gender (2 bits, values 0-3)
-            # bit 9:      number (1 bit, values 0-1)
-            # bits 10-29: lemmaIdx (20 bits, up to 1M lemmas)
-            packed = (
-                (lemma_idx << 10) |
-                (number_code << 9) |
-                (gender_code << 7) |
-                (case_code << 4) |
-                pos_code
-            )
-            all_entries.append(packed)
+                # Pack into u32:
+                # bits 0-3:   pos (4 bits, values 0-15)
+                # bits 4-6:   case (3 bits, values 0-4)
+                # bits 7-8:   gender (2 bits, values 0-3)
+                # bit 9:      number (1 bit, values 0-1)
+                # bits 10-29: lemmaIdx (20 bits, up to 1M lemmas)
+                packed = (
+                    (lemma_idx << 10) |
+                    (number_code << 9) |
+                    (gender_code << 7) |
+                    (case_code << 4) |
+                    pos_code
+                )
+                all_entries.append(packed)
+        else:
+            # Collapse morph variants to lemma+pos
+            lemma_pos_set = {(lemma, pos) for lemma, pos, *_ in lemma_morph_set}
+
+            def sort_key(lm):
+                lemma, pos = lm
+                freq = unigram_freqs.get(lemma, 0)
+                return (-freq, lemma, pos)
+
+            sorted_entries = sorted(lemma_pos_set, key=sort_key)
+
+            for lemma, pos in sorted_entries:
+                lemma_idx = lemma_to_idx[lemma]
+                pos_code = POS_TO_CODE.get(pos, 10)  # 10 = unknown
+                # Version 1 packing: bits 0-3=pos, bits 4-23=lemmaIdx
+                packed = (lemma_idx << 4) | pos_code
+                all_entries.append(packed)
 
         entry_offsets.append(len(all_entries))
 
     print(f"  Total entries: {len(all_entries):,}")
 
     # Write binary file
-    print(f"Writing {OUTPUT_FILE}...")
+    print(f"Writing {output_path}...")
     DIST_DIR.mkdir(exist_ok=True)
 
-    with open(OUTPUT_FILE, 'wb') as f:
+    with open(output_path, 'wb') as f:
         # Header (32 bytes)
         header = struct.pack('<IIIIIIII',
             MAGIC,
-            VERSION,
+            version,
             len(string_pool),
             len(lemma_list),
             len(sorted_words),
@@ -456,8 +550,8 @@ def main():
         for freq in bigram_freqs:
             f.write(struct.pack('<I', freq))
 
-    file_size = OUTPUT_FILE.stat().st_size
-    print(f"\nOutput: {OUTPUT_FILE}")
+    file_size = output_path.stat().st_size
+    print(f"\nOutput: {output_path}")
     print(f"  File size: {file_size / 1024 / 1024:.2f} MB")
 
     # Size breakdown
@@ -477,7 +571,7 @@ def main():
     print(f"  Bigram freqs: {len(bigrams_sorted) * 4:,} bytes")
 
     # Verify some lookups
-    print("\nVerification samples (with morph):")
+    print("\nVerification samples:")
     test_words = ['við', 'á', 'hestinum', 'fara', 'góðan']
     for word in test_words:
         if word in word_to_sorted_idx:
@@ -487,19 +581,27 @@ def main():
             entries = all_entries[start:end]
             lemmas = []
             for e in entries[:3]:
-                # Unpack: bits 10-29=lemmaIdx, bit 9=number, bits 7-8=gender, bits 4-6=case, bits 0-3=pos
-                lemma_idx = e >> 10
-                number_code = (e >> 9) & 0x1
-                gender_code = (e >> 7) & 0x3
-                case_code = (e >> 4) & 0x7
-                pos_code = e & 0xF
-                lemma = lemma_list[lemma_idx]
-                pos = CODE_TO_POS.get(pos_code, '??')
-                case = CODE_TO_CASE.get(case_code, '')
-                gender = CODE_TO_GENDER.get(gender_code, '')
-                number = CODE_TO_NUMBER.get(number_code, '')
-                morph = f"{case}/{gender}/{number}" if (case or gender or number) else ""
-                lemmas.append(f"{lemma}:{pos}" + (f"[{morph}]" if morph else ""))
+                if version >= 2:
+                    # Unpack: bits 10-29=lemmaIdx, bit 9=number, bits 7-8=gender, bits 4-6=case, bits 0-3=pos
+                    lemma_idx = e >> 10
+                    number_code = (e >> 9) & 0x1
+                    gender_code = (e >> 7) & 0x3
+                    case_code = (e >> 4) & 0x7
+                    pos_code = e & 0xF
+                    lemma = lemma_list[lemma_idx]
+                    pos = CODE_TO_POS.get(pos_code, '??')
+                    case = CODE_TO_CASE.get(case_code, '')
+                    gender = CODE_TO_GENDER.get(gender_code, '')
+                    number = CODE_TO_NUMBER.get(number_code, '')
+                    morph = f"{case}/{gender}/{number}" if (case or gender or number) else ""
+                    lemmas.append(f"{lemma}:{pos}" + (f"[{morph}]" if morph else ""))
+                else:
+                    # Unpack v1: bits 4-23=lemmaIdx, bits 0-3=pos
+                    lemma_idx = e >> 4
+                    pos_code = e & 0xF
+                    lemma = lemma_list[lemma_idx]
+                    pos = CODE_TO_POS.get(pos_code, '??')
+                    lemmas.append(f"{lemma}:{pos}")
             print(f"  {word} → {', '.join(lemmas)}")
 
     return 0

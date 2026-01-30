@@ -1014,7 +1014,7 @@
 
       if (type === "error") {
         app.innerHTML = '<div class="error"><strong>Error:</strong> ' + payload +
-          '<br><br>Make sure data-dist/lemma-is.bin exists and you\'re serving via HTTP (not file://).</div>';
+          '<br><br>Make sure data-dist/lemma-is.core.bin exists (or add ?full=1) and you\'re serving via HTTP (not file://).</div>';
       }
 
       if (type === "results") {
@@ -1278,7 +1278,10 @@
     }
 
     // Start loading
-    const binUrl = new URL("./data-dist/lemma-is.bin", location.href).href;
+    const params = new URLSearchParams(location.search);
+    const useFull = params.get("full") === "1";
+    const binFile = useFull ? "lemma-is.bin" : "lemma-is.core.bin";
+    const binUrl = new URL(`./data-dist/${binFile}`, location.href).href;
     worker.postMessage({ type: "load", payload: { url: binUrl } });
   </script>
 </body>

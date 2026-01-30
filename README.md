@@ -65,8 +65,8 @@ npm install lemma-is
 import { readFileSync } from "fs";
 import { BinaryLemmatizer, extractIndexableLemmas } from "lemma-is";
 
-// Load the binary (91 MB, ~35ms cold start)
-const buffer = readFileSync("node_modules/lemma-is/data-dist/lemma-is.bin");
+// Load the core binary (~9-11 MB, low memory, best for browser/edge)
+const buffer = readFileSync("node_modules/lemma-is/data-dist/lemma-is.core.bin");
 const lemmatizer = BinaryLemmatizer.loadFromBuffer(
   buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
 );
@@ -170,13 +170,38 @@ This is an early effort with known limitations.
 
 ### File Size
 
-The binary is **91 MB**. This targets Node.js servers where data loads once at startup. Not recommended for:
+There are two binaries:
+
+- **Core (~9-11 MB)**: default, optimized for browser/edge/cold start
+- **Full (91 MB)**: maximum coverage and disambiguation
+
+The full binary targets Node.js servers where data loads once at startup. Not recommended for:
 
 - **Serverless/edge** — cold start loading 91 MB may be slow
 - **Browser** — download size prohibitive
 - **Cloudflare Workers** — fits 128 MB limit but cold starts are slow
 
-For browser apps, run lemmatization server-side.
+For browser apps, use the **core** binary.
+
+To load the full binary:
+
+```typescript
+const buffer = readFileSync("node_modules/lemma-is/data-dist/lemma-is.bin");
+```
+
+### Compact Builds (Browser/Edge)
+
+For cold-start runtimes and the browser, you can build a **compact core** binary that trades accuracy for size by:
+- Keeping only the most frequent word forms
+- Dropping bigram data and morphological features
+
+This reduces memory significantly at the cost of recall/precision on rare words.
+
+```bash
+pnpm build:core
+```
+
+The output is written to `data-dist/lemma-is.core.bin`. Use it exactly like the full binary; it just covers fewer word forms.
 
 ### Not a Parser
 

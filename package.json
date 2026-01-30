@@ -1,6 +1,6 @@
 {
   "name": "lemma-is",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Icelandic word form to lemma lookup for browser and Node.js",
   "keywords": [
     "icelandic",
@@ -25,11 +25,15 @@
   "files": [
     "dist",
     "data-dist/lemma-is.bin",
+    "data-dist/lemma-is.core.bin",
     "README.md"
   ],
   "scripts": {
     "build": "tsdown",
     "build:data": "uv run python scripts/build-data.py",
+    "build:binary": "uv run python scripts/build-binary.py",
+    "build:core": "uv run python scripts/build-binary.py --no-bigrams --no-morph --top-words 350000 --output data-dist/lemma-is.core.bin",
+    "benchmark:core-sweep": "node --import=tsx scripts/benchmark/core-sweep.ts",
     "test": "NODE_OPTIONS='--max-old-space-size=8192' vitest run",
     "test:watch": "NODE_OPTIONS='--max-old-space-size=8192' vitest",
     "typecheck": "tsc --noEmit",

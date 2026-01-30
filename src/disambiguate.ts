@@ -23,8 +23,6 @@ export interface DisambiguatorOptions {
   leftWeight?: number;
   /** Weight for right context (next word) */
   rightWeight?: number;
-  /** Enable phrase-based disambiguation */
-  usePhraseRules?: boolean;
   /** Enable preference rules (e.g., "á" context rules) */
   usePreferenceRules?: boolean;
   /** Enable grammar rules (case government) */
@@ -75,6 +73,11 @@ interface DisambiguationContext {
   allTokens: string[];
   /** Current index in the sequence */
   index: number;
+}
+
+export interface DisambiguationContextHint {
+  prevLemmas?: string[];
+  nextLemmas?: string[];
 }
 
 /**
@@ -316,7 +319,6 @@ export class Disambiguator {
   bigrams: BigramProvider | null;
   leftWeight: number;
   rightWeight: number;
-  usePhraseRules: boolean;
   usePreferenceRules: boolean;
   useGrammarRules: boolean;
 
@@ -329,7 +331,6 @@ export class Disambiguator {
     this.bigrams = bigrams;
     this.leftWeight = options.leftWeight ?? 1.0;
     this.rightWeight = options.rightWeight ?? 1.0;
-    this.usePhraseRules = options.usePhraseRules ?? true;
     this.usePreferenceRules = options.usePreferenceRules ?? true;
     this.useGrammarRules = options.useGrammarRules ?? true;
   }
@@ -344,7 +345,8 @@ export class Disambiguator {
   disambiguate(
     word: string,
     prevWord: string | null,
-    nextWord: string | null
+    nextWord: string | null,
+    hint: DisambiguationContextHint = {}
   ): DisambiguatedToken {
     // Get candidates with POS if available
     let candidatesWithPOS: LemmaWithPOS[];
@@ -369,6 +371,8 @@ export class Disambiguator {
     const context: DisambiguationContext = {
       prevWord,
       nextWord,
+      prevLemmas: hint.prevLemmas,
+      nextLemmas: hint.nextLemmas,
       nextWordMorph,
       allTokens: [word],
       index: 0,
