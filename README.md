@@ -26,20 +26,39 @@ If a user searches "hestur" but your document contains "hestinum", they won't fi
 
 ## Why lemma-is?
 
-The gold standard for Icelandic NLP is [GreynirEngine](https://github.com/mideind/GreynirEngine)—a full grammatical parser with excellent accuracy. But it's Python-only, which means you can't run it in Node.js, browsers, or edge runtimes without FFI or a sidecar process.
+GreynirEngine remains the gold standard for **sentence parsing** and grammatical analysis in Icelandic. But full parsing is not forgiving: if a sentence doesn't parse, you don't get disambiguated lemmas. That makes it a poor fit for messy, real‑world search indexing where recall matters.
 
-lemma-is trades parsing accuracy for JavaScript portability. It's a lookup table with shallow grammar rules—good enough for search indexing, runs anywhere Node.js runs.
+GreynirEngine also exposes a non‑parsing lemmatizer via its `bintokenizer`/`simple_lemmatize` pipeline, which can return all possible lemmas for a token. This is more forgiving but **overindexes heavily** without sentence‑level disambiguation.
 
-| | lemma-is | GreynirEngine |
-|---|---|---|
-| **Runtime** | Node, Bun, Deno | Python |
-| **Throughput** | ~250K words/sec | ~25K words/sec |
-| **Cold start** | ~35 ms | ~500 ms |
-| **Memory** | ~185 MB | ~200 MB |
-| **Disambiguation** | Bigrams + grammar rules | Full sentence parsing |
-| **Use case** | Search indexing | NLP analysis |
+lemma-is targets this gap: high‑recall lemmatization for search, tolerant of noise, with light disambiguation and compound splitting, and it runs anywhere JavaScript runs.
+
+IFD benchmark summary (lemma recall + overindexing measured against gold lemmas in the Icelandic Frequency Dictionary corpus):
+
+| | lemma-is core | lemma-is full | GreynirEngine (BÍN lookup) |
+|---|---|---|---|
+| **Runtime** | Node, Bun, Deno | Node, Bun, Deno | Python |
+| **Throughput** | ~19.0M words/min | ~14.7M words/min | ~13.3K words/min |
+| **Recall (IFD)** | 95.996% | 98.585% | 81.4% (parsed-only) |
+| **Avg candidates** | 1.57 | 1.57 | 1.0 |
+| **Overindexing (extraRate)** | 0.388 | 0.373 | 0.186 |
+| **Memory (load)** | ~18.5 MB | ~182 MB | ~417 MB RSS |
+| **Parse failures** | n/a | n/a | 27% (sample) |
+| **Disambiguation** | Bigrams + grammar rules | Bigrams + grammar rules | Full grammar + BÍN |
+| **Use case** | Search indexing | Search indexing | NLP analysis |
 
 See [BENCHMARKS.md](./BENCHMARKS.md) for methodology and detailed results.
+The IFD gold corpus is referenced here: `https://repository.clarin.is/repository/xmlui/handle/20.500.12537/36`.
+GreynirEngine numbers are from full sentence parsing on a 1,000-sentence IFD sample; parse failures and tokenization mismatches lower measured recall. The bintokenizer-based lemmatizer is more forgiving but overindexes heavily when all lemmas are kept.
+
+### Optimization summary (0.5.0)
+
+- **Core memory**: ~18.5 MB load (heap + ArrayBuffers) for `lemma-is.core.bin`
+- **Full memory**: ~182 MB load for `lemma-is.bin`
+- **Greynir full parser memory**: ~417 MB RSS (sample run)
+- **Core speed**: ~19.0M words/min; **Full speed**: ~14.7M words/min
+- **Core recall**: 95.996% on IFD; **Full recall**: 98.585%
+- **Core recall boost**: unknown‑word suffix fallback enabled only in core to raise recall without hurting full
+- **Lower memory compound lookup**: Bloom filter known‑lemma lookup reduces RAM when splitting compounds
 
 ### The Trade-off
 
@@ -111,9 +130,9 @@ disambiguator.disambiguate("á", null, "borðinu");
 Icelandic forms long compounds. Split them for better search coverage:
 
 ```typescript
-import { CompoundSplitter, createKnownLemmaSet } from "lemma-is";
+import { CompoundSplitter, createKnownLemmaFilter } from "lemma-is";
 
-const knownLemmas = createKnownLemmaSet(lemmatizer.getAllLemmas());
+const knownLemmas = createKnownLemmaFilter(lemmatizer.getAllLemmas());
 const splitter = new CompoundSplitter(lemmatizer, knownLemmas);
 
 splitter.split("landbúnaðarráðherra");

@@ -16,6 +16,7 @@ import {
   BinaryLemmatizer,
   CompoundSplitter,
   createKnownLemmaSet,
+  createKnownLemmaFilter,
   extractIndexableLemmas,
   processText,
 } from "../../src/index.js";
@@ -24,6 +25,7 @@ interface Args {
   baseline: string;
   candidate: string;
   output?: string;
+  useBloom?: boolean;
 }
 
 function parseArgs(): Args {
@@ -38,6 +40,7 @@ function parseArgs(): Args {
     if (arg === "--baseline") out.baseline = args[++i];
     else if (arg === "--candidate") out.candidate = args[++i];
     else if (arg === "--output") out.output = args[++i];
+    else if (arg === "--use-bloom") out.useBloom = true;
   }
 
   if (!out.candidate) {
@@ -54,8 +57,10 @@ function loadLemmatizer(path: string): BinaryLemmatizer {
   );
 }
 
-function makeSplitter(lemmatizer: BinaryLemmatizer): CompoundSplitter {
-  const knownLemmas = createKnownLemmaSet(lemmatizer.getAllLemmas());
+function makeSplitter(lemmatizer: BinaryLemmatizer, useBloom: boolean): CompoundSplitter {
+  const knownLemmas = useBloom
+    ? createKnownLemmaFilter(lemmatizer.getAllLemmas(), { falsePositiveRate: 0.01 })
+    : createKnownLemmaSet(lemmatizer.getAllLemmas());
   return new CompoundSplitter(lemmatizer, knownLemmas, {
     minPartLength: 3,
     mode: "balanced",
@@ -103,8 +108,8 @@ const candidatePath = isAbsolute(args.candidate)
 const baseline = loadLemmatizer(baselinePath);
 const candidate = loadLemmatizer(candidatePath);
 
-const baselineSplitter = makeSplitter(baseline);
-const candidateSplitter = makeSplitter(candidate);
+const baselineSplitter = makeSplitter(baseline, args.useBloom ?? false);
+const candidateSplitter = makeSplitter(candidate, args.useBloom ?? false);
 
 const baselineOptions = {
   bigrams: baseline.bigramCountValue > 0 ? baseline : undefined,

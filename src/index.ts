@@ -64,10 +64,13 @@ export {
 export {
   CompoundSplitter,
   createKnownLemmaSet,
+  createKnownLemmaFilter,
   PROTECTED_LEMMAS,
   type CompoundSplit,
   type CompoundSplitterOptions,
   type CompoundSplitMode,
+  type KnownLemmaLookup,
+  type KnownLemmaFilterOptions,
 } from "./compounds.js";
 export {
   STATIC_PHRASES,

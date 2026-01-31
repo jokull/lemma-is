@@ -32,6 +32,25 @@ const SKIP_KINDS = new Set([
   "unknown",
 ]);
 
+const UNKNOWN_SUFFIXES = [
+  "arinnar",
+  "anna",
+  "unum",
+  "um",
+  "ir",
+  "ar",
+  "ur",
+  "a",
+  "i",
+  "ið",
+  "inn",
+  "in",
+];
+
+const MIN_UNKNOWN_WORD_LENGTH = 6;
+const MIN_STRIPPED_LENGTH = 3;
+const MAX_SUFFIX_STRIPS = 2;
+
 /**
  * A processed token with lemmatization results.
  */
@@ -116,12 +135,64 @@ export function processText(
   const results: ProcessedToken[] = [];
   const wordTokens: { index: number; token: Token }[] = [];
   const lemmaCache = new Map<string, string[]>();
+  const allowSuffixFallback =
+    "bigramCountValue" in lemmatizer
+      ? (lemmatizer as { bigramCountValue?: number }).bigramCountValue === 0
+      : false;
+
+  const isUnknownLemma = (raw: string, lemmas: string[]): boolean =>
+    lemmas.length === 1 && lemmas[0] === raw.toLowerCase();
+
+  const trySuffixFallback = (raw: string): string[] | null => {
+    let current = raw;
+    let strippedCandidate: string | null = null;
+
+    for (let attempt = 0; attempt < MAX_SUFFIX_STRIPS; attempt++) {
+      const lower = current.toLowerCase();
+      strippedCandidate = null;
+
+      for (const suffix of UNKNOWN_SUFFIXES) {
+        if (!lower.endsWith(suffix)) continue;
+
+        const next = current.slice(0, current.length - suffix.length);
+        if (next.length < MIN_STRIPPED_LENGTH) continue;
+
+        const nextLemmas = lemmatizer.lemmatize(next);
+        if (!isUnknownLemma(next, nextLemmas)) {
+          return nextLemmas;
+        }
+
+        if (!strippedCandidate) {
+          strippedCandidate = next;
+        }
+      }
+
+      if (!strippedCandidate || strippedCandidate.length < MIN_UNKNOWN_WORD_LENGTH) {
+        break;
+      }
+
+      current = strippedCandidate;
+    }
+
+    return null;
+  };
 
   const getLemmas = (raw: string): string[] => {
     const key = raw.toLowerCase();
     const cached = lemmaCache.get(key);
     if (cached) return cached;
     const lemmas = lemmatizer.lemmatize(raw);
+    if (
+      allowSuffixFallback &&
+      isUnknownLemma(raw, lemmas) &&
+      raw.length >= MIN_UNKNOWN_WORD_LENGTH
+    ) {
+      const fallbackLemmas = trySuffixFallback(raw);
+      if (fallbackLemmas) {
+        lemmaCache.set(key, fallbackLemmas);
+        return fallbackLemmas;
+      }
+    }
     lemmaCache.set(key, lemmas);
     return lemmas;
   };

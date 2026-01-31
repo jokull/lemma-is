@@ -13,6 +13,7 @@
  */
 
 import type { LemmatizerLike } from "./types.js";
+import { BloomFilter, type BloomFilterOptions } from "./bloom.js";
 
 /**
  * Protected lemmas that should NEVER be split as compounds.
@@ -218,12 +219,12 @@ export class CompoundSplitter {
   private lemmatizer: LemmatizerLike;
   private minPartLength: number;
   private tryLinkingLetters: boolean;
-  private knownLemmas: Set<string>;
+  private knownLemmas: KnownLemmaLookup;
   private mode: CompoundSplitMode;
 
   constructor(
     lemmatizer: LemmatizerLike,
-    knownLemmas: Set<string>,
+    knownLemmas: KnownLemmaLookup,
     options: CompoundSplitterOptions = {}
   ) {
     this.lemmatizer = lemmatizer;
@@ -467,4 +468,22 @@ export class CompoundSplitter {
  */
 export function createKnownLemmaSet(lemmas: string[]): Set<string> {
   return new Set(lemmas.map((l) => l.toLowerCase()));
+}
+
+export interface KnownLemmaLookup {
+  has(lemma: string): boolean;
+}
+
+export interface KnownLemmaFilterOptions extends BloomFilterOptions {}
+
+/**
+ * Create a compact lookup for known lemmas using a Bloom filter.
+ * False positives are possible (more splits), false negatives are not.
+ */
+export function createKnownLemmaFilter(
+  lemmas: string[],
+  options: KnownLemmaFilterOptions = {}
+): KnownLemmaLookup {
+  const normalized = lemmas.map((l) => l.toLowerCase());
+  return BloomFilter.fromValues(normalized, options);
 }

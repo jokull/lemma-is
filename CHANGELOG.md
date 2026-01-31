@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-01-31
+
+### Added
+
+- Bloom filter known-lemma lookup for compound splitting to reduce memory footprint
+- IFD/IGC gold-eval utilities and GreynirEngine comparison scripts (local benchmarks)
+
+### Changed
+
+- Core-only unknown-word suffix fallback for improved recall on rare inflections
+- Morph lookup caching in disambiguator to reduce repeated morph queries
+- README positioning updated for search indexing vs full parsing tradeoffs
+
 ## [0.4.0] - 2026-01-30
 
 ### Added

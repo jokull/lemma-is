@@ -194,10 +194,10 @@ const grammarRulesPhase: DisambiguationPhase = {
     }));
 
     // Get morphological info for candidates if available
-    if (disambiguator.lemmatizer.lemmatizeWithMorph) {
-      const currentWord = context.allTokens[context.index];
-      if (currentWord) {
-        const morphCandidates = disambiguator.lemmatizer.lemmatizeWithMorph(currentWord);
+    const currentWord = context.allTokens[context.index];
+    if (currentWord) {
+      const morphCandidates = disambiguator.getMorph(currentWord);
+      if (morphCandidates) {
         // Replace with morph-enriched candidates
         candidatesWithMorph.length = 0;
         candidatesWithMorph.push(...morphCandidates);
@@ -321,6 +321,7 @@ export class Disambiguator {
   rightWeight: number;
   usePreferenceRules: boolean;
   useGrammarRules: boolean;
+  private morphCache: Map<string, LemmaWithMorph[]> | null;
 
   constructor(
     lemmatizer: LemmatizerLike,
@@ -333,6 +334,17 @@ export class Disambiguator {
     this.rightWeight = options.rightWeight ?? 1.0;
     this.usePreferenceRules = options.usePreferenceRules ?? true;
     this.useGrammarRules = options.useGrammarRules ?? true;
+    this.morphCache = this.lemmatizer.lemmatizeWithMorph ? new Map() : null;
+  }
+
+  private getMorph(word: string): LemmaWithMorph[] | undefined {
+    if (!this.lemmatizer.lemmatizeWithMorph || !this.morphCache) return undefined;
+    const key = word.toLowerCase();
+    const cached = this.morphCache.get(key);
+    if (cached) return cached;
+    const morph = this.lemmatizer.lemmatizeWithMorph(word);
+    this.morphCache.set(key, morph);
+    return morph;
   }
 
   /**
@@ -363,8 +375,8 @@ export class Disambiguator {
 
     // Get morphological info for next word if available
     let nextWordMorph: LemmaWithMorph[] | undefined;
-    if (nextWord && this.lemmatizer.lemmatizeWithMorph) {
-      nextWordMorph = this.lemmatizer.lemmatizeWithMorph(nextWord);
+    if (nextWord) {
+      nextWordMorph = this.getMorph(nextWord);
     }
 
     // Build context
