@@ -381,6 +381,120 @@ export function extractIndexableLemmas(
 }
 
 /**
+ * Options for building a backend-agnostic boolean search query.
+ */
+export interface SearchQueryOptions extends ProcessOptions {
+  /** Operator between token groups (AND). Default: " & " */
+  andOperator?: string;
+  /** Operator between candidate lemmas within a group (OR). Default: " | " */
+  orOperator?: string;
+  /** Wrap groups with multiple terms in parentheses. Default: true */
+  wrapGroups?: boolean;
+  /**
+   * Include the original token (lowercased) in each group for recall.
+   * Useful for unknown words or when you want a fallback.
+   * Default: false
+   */
+  includeOriginal?: boolean;
+  /** Lowercase original tokens when includeOriginal is true. Default: true */
+  lowercaseOriginal?: boolean;
+}
+
+/**
+ * Result for a backend-agnostic boolean search query.
+ */
+export interface SearchQueryResult {
+  /** Lemma groups per token (OR within group, AND between groups) */
+  groups: string[][];
+  /** Boolean query string using provided operators */
+  query: string;
+}
+
+/**
+ * Build a backend-agnostic boolean query string from user input.
+ *
+ * Use the same lemmatization pipeline as indexing, then:
+ * - OR within a token's candidate lemmas
+ * - AND across tokens
+ *
+ * @param text - User search input
+ * @param lemmatizer - Lemmatizer instance
+ * @param options - Query + processing options
+ */
+export function buildSearchQuery(
+  text: string,
+  lemmatizer: LemmatizerLike,
+  options: SearchQueryOptions = {}
+): SearchQueryResult {
+  const {
+    removeStopwords = false,
+    indexAllCandidates = true,
+    useContextualStopwords = false,
+    andOperator = " & ",
+    orOperator = " | ",
+    wrapGroups = true,
+    includeOriginal = false,
+    lowercaseOriginal = true,
+  } = options;
+
+  const processed = processText(text, lemmatizer, options);
+  const groups: string[][] = [];
+
+  /**
+   * Check if a lemma should be filtered as a stopword.
+   * Uses contextual rules when enabled and POS is available.
+   */
+  const shouldFilter = (lemma: string, pos?: string): boolean => {
+    if (!removeStopwords) return false;
+    if (useContextualStopwords) {
+      return isContextualStopword(lemma, pos);
+    }
+    return STOPWORDS_IS.has(lemma);
+  };
+
+  for (const token of processed) {
+    // Mirror indexing behavior: skip entities
+    if (token.isEntity) continue;
+
+    let candidates: string[] = [];
+    if (indexAllCandidates) {
+      candidates = token.lemmas;
+    } else if (token.disambiguated) {
+      candidates = [token.disambiguated];
+    }
+
+    if (includeOriginal) {
+      const raw = token.original ?? "";
+      if (raw.length > 0) {
+        const original = lowercaseOriginal ? raw.toLowerCase() : raw;
+        candidates = [...candidates, original];
+      }
+    }
+
+    const unique = [
+      ...new Set(candidates.filter((lemma) => lemma && !shouldFilter(lemma))),
+    ];
+
+    if (unique.length > 0) {
+      groups.push(unique);
+    }
+  }
+
+  const query = groups
+    .map((group) => {
+      const joined = group.join(orOperator);
+      if (wrapGroups && group.length > 1) {
+        return `(${joined})`;
+      }
+      return joined;
+    })
+    .filter((part) => part.length > 0)
+    .join(andOperator);
+
+  return { groups, query };
+}
+
+/**
  * Strategy for benchmark comparisons.
  */
 export type ProcessingStrategy = "naive" | "tokenized" | "disambiguated" | "full";

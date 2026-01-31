@@ -3,7 +3,7 @@
 Fast Icelandic lemmatization for JavaScript. Built for search indexing.
 
 ```typescript
-import { BinaryLemmatizer, extractIndexableLemmas } from "lemma-is";
+import { BinaryLemmatizer, extractIndexableLemmas, buildSearchQuery } from "lemma-is";
 
 lemmatizer.lemmatize("börnin");   // → ["barn"]
 lemmatizer.lemmatize("keypti");   // → ["kaupa"]
@@ -12,6 +12,10 @@ lemmatizer.lemmatize("hestinum"); // → ["hestur"]
 // Full pipeline for search
 extractIndexableLemmas("Börnin keypti hestinn", lemmatizer);
 // → ["barn", "kaupa", "hestur"]
+
+// Query normalization (backend-agnostic)
+buildSearchQuery("bílaleigur", lemmatizer);
+// → { groups: [["bílaleiga"]], query: "bílaleiga" }
 ```
 
 ## The Problem
@@ -165,7 +169,37 @@ const lemmas = extractIndexableLemmas(text, lemmatizer, {
 
 A search for "sjóður" or "arður" now finds this document.
 
-## PostgreSQL Full-Text Search
+## Query Normalization (Backend-Agnostic)
+
+Use the same lemmatization pipeline for **search queries** as for documents.
+The helper returns grouped terms plus a boolean query string:
+
+```typescript
+import { buildSearchQuery } from "lemma-is";
+
+const { groups, query } = buildSearchQuery("bílaleigur", lemmatizer, {
+  removeStopwords: true,
+});
+
+// groups: [["bílaleiga"]]
+// query: "bílaleiga"
+```
+
+You can swap operators to match your backend:
+
+```typescript
+// SQLite FTS5 prefers AND/OR
+const sqlite = buildSearchQuery("við fórum í bíó", lemmatizer, {
+  removeStopwords: true,
+  andOperator: " AND ",
+  orOperator: " OR ",
+});
+
+// Elasticsearch can use `groups` to build a bool query
+// (OR within a group, AND across groups)
+```
+
+## PostgreSQL Full-Text Search (Example)
 
 PostgreSQL has no built-in Icelandic stemmer. Use lemma-is to pre-process:
 
@@ -182,6 +216,14 @@ await db.query(
 Use the `simple` configuration—it lowercases but doesn't stem, since our lemmas are already normalized.
 
 **Important:** Don't use PostgreSQL's `unaccent` extension for Icelandic. Characters like á, ö, þ, ð are distinct letters, not accented variants.
+
+For queries:
+
+```typescript
+const { query } = buildSearchQuery(userQuery, lemmatizer, { removeStopwords: true });
+const sql = `SELECT * FROM documents WHERE search_vector @@ to_tsquery('simple', $1)`;
+await db.query(sql, [query]);
+```
 
 ## Limitations
 

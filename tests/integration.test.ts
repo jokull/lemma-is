@@ -13,6 +13,7 @@ import {
   createKnownLemmaSet,
   processText,
   extractIndexableLemmas,
+  buildSearchQuery,
   extractDisambiguatedLemmas,
 } from "../src/index.js";
 
@@ -232,6 +233,13 @@ describe("README Examples Verification", () => {
   it("isKnown works", () => {
     expect(lemmatizer.isKnown("hestur")).toBe(true);
     expect(lemmatizer.isKnown("xyzabc123")).toBe(false);
+  });
+
+  it("buildSearchQuery normalizes queries", () => {
+    const { groups, query } = buildSearchQuery("bílaleigur", lemmatizer);
+    expect(groups.length).toBeGreaterThan(0);
+    expect(groups[0]).toContain("bílaleiga");
+    expect(query).toContain("bílaleiga");
   });
 });
 

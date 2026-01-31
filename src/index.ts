@@ -82,9 +82,12 @@ export {
 export {
   processText,
   extractIndexableLemmas,
+  buildSearchQuery,
   runBenchmark,
   type ProcessedToken,
   type ProcessOptions,
+  type SearchQueryOptions,
+  type SearchQueryResult,
   type ProcessingStrategy,
   type ProcessingMetrics,
 } from "./pipeline.js";
