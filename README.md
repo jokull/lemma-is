@@ -28,6 +28,19 @@ hestur, hest, hesti, hests, hestar, hesta, hestum, hestanna...
 
 If a user searches "hestur" but your document contains "hestinum", they won't find it—unless you normalize both to the lemma at index time.
 
+## Background
+
+Icelandic is underserved in the search ecosystem:
+
+- **PostgreSQL** has no Icelandic stemmer ([Snowball](https://snowballstem.org/) doesn't support it)
+- **Elasticsearch** has no Icelandic analyzer in its [36 built-in languages](https://www.elastic.co/guide/en/elasticsearch/reference/current/analysis-lang-analyzer.html)
+- **Algolia** lists Icelandic but only provides basic plurals—no morphological analysis
+- **Existing Icelandic NLP tools** ([Greynir](https://github.com/mideind/GreynirPackage), [Nefnir](https://github.com/jonfd/nefnir)) are Python-only
+
+For comparison, Finnish has [Voikko](https://voikko.puimula.org/) with PostgreSQL and Elasticsearch plugins. Icelandic has had nothing equivalent—until now.
+
+lemma-is is the first npm package providing Icelandic lemmatization for search. It embeds the [BÍN](https://bin.arnastofnun.is/) morphological database and runs anywhere JavaScript runs.
+
 ## Why lemma-is?
 
 GreynirEngine remains the gold standard for **sentence parsing** and grammatical analysis in Icelandic. But full parsing is not forgiving: if a sentence doesn't parse, you don't get disambiguated lemmas. That makes it a poor fit for messy, real‑world search indexing where recall matters.

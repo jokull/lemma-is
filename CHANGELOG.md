@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-02-01
+
+### Added
+
+- **Hyphen splitting for unknown words**: Unknown hyphenated tokens like "COVID-sýking" now index both parts separately, improving recall for loanword compounds
+- **Search UX test suite**: 30+ tests validating real-world Icelandic search scenarios (inflection matching, compound search, verb conjugation)
+- README "Background" section explaining the Icelandic search ecosystem gap
+
+### Fixed
+
+- Search for partial terms in hyphenated words (e.g., "COVID" now finds "COVID-sýking")
+
+## [0.7.0] - 2026-02-01
+
+### Added
+
+- **Token normalization for non-word types**: Pipeline now indexes rich token types from tokenize-is:
+  - Phone numbers: `+3545551234` (with country code prefix)
+  - Emails: lowercase normalized
+  - URLs/domains: preserved or lowercased
+  - Dates: ISO format `2024-03-15`
+  - Times: `HH:MM` or `HH:MM:SS`
+  - Timestamps: ISO format
+  - SSN (kennitala): `010130-2989` (with dash)
+  - Amounts: `100 USD` (value + currency)
+  - Measurements: `15 m` (value + unit)
+  - Percentages: `25%` (with suffix)
+  - Hashtags: `#iceland` (keeps prefix, lowercased)
+  - Usernames: `@jokull` (keeps prefix, lowercased)
+- `normalizeToken` export for custom token handling
+- Type indicators preserved to prevent over-indexing (searching "iceland" won't match "#iceland")
+
 ## [0.6.0] - 2026-01-31
 
 ### Added

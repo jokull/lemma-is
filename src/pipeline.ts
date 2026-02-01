@@ -233,6 +233,21 @@ export function processText(
       // - Always if alwaysTryCompounds is set (for better search recall)
       // - Otherwise only if lemmatization returns unknown word
       const isUnknownWord = lemmas.length === 1 && lemmas[0] === tokenText.toLowerCase();
+
+      // Split unknown hyphenated words (e.g., "COVID-sýking" → "covid" + "sýking")
+      if (isUnknownWord && tokenText.includes("-")) {
+        const hyphenParts = tokenText.split("-");
+        const partLemmas: string[] = [];
+        for (const part of hyphenParts) {
+          if (part.length > 0) {
+            partLemmas.push(...getLemmas(part));
+          }
+        }
+        if (partLemmas.length > 0) {
+          processed.lemmas = [...new Set([...lemmas, ...partLemmas])];
+        }
+      }
+
       if (compoundSplitter && (alwaysTryCompounds || isUnknownWord)) {
         const split = compoundSplitter.split(tokenText);
         if (split.isCompound) {
