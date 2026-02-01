@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-02-01
+
+### Added
+
+- **Suffix stripping for foreign names**: Foreign names with Icelandic case endings are now indexed with their base form. Searching for "Simon" finds documents containing "Simons" (genitive), "Obama" finds "Obamas", etc.
+- New `stripUnknownSuffixes` option in `ProcessOptions` (default: `true`)
+- IGC-2024 HuggingFace corpus test harness for coverage testing
+
+### Changed
+
+- Extended suffix list with genitive `-s` and other common Icelandic case endings
+- Suffix stripping only applies to words not found in BIN (prevents overindexing)
+
 ## [0.8.0] - 2026-02-01
 
 ### Added
