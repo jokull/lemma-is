@@ -5,4 +5,5 @@ description = "Build scripts for lemma-is data files"
 requires-python = ">=3.13"
 dependencies = [
     "icegrams>=1.1.6",
+    "datasets>=3.0.0",
 ]

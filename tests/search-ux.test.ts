@@ -304,6 +304,66 @@ describe("Search UX: Edge cases and tricky scenarios", () => {
   });
 });
 
+describe("Search UX: Foreign names with Icelandic inflection", () => {
+  let lemmatizer: BinaryLemmatizer;
+  let splitter: CompoundSplitter;
+
+  beforeAll(() => {
+    const dataDir = join(import.meta.dirname, "..", "data-dist");
+    const buffer = readFileSync(join(dataDir, "lemma-is.bin"));
+    lemmatizer = BinaryLemmatizer.loadFromBuffer(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+    );
+    const knownLemmas = createKnownLemmaSet(lemmatizer.getAllLemmas());
+    splitter = new CompoundSplitter(lemmatizer, knownLemmas);
+  });
+
+  function searchMatches(query: string, document: string): boolean {
+    const queryResult = buildSearchQuery(query, lemmatizer, {
+      bigrams: lemmatizer,
+      compoundSplitter: splitter,
+      removeStopwords: true,
+    });
+    const docLemmas = extractIndexableLemmas(document, lemmatizer, {
+      bigrams: lemmatizer,
+      compoundSplitter: splitter,
+      removeStopwords: true,
+    });
+
+    return queryResult.groups.every((group) =>
+      group.some((lemma) => docLemmas.has(lemma))
+    );
+  }
+
+  // Foreign names get Icelandic case endings. The suffix stripping feature
+  // allows searching for the base name to find inflected forms.
+
+  it("search 'Simon' finds doc with 'Simons' (genitive)", () => {
+    expect(searchMatches("Simon", "Bók Simons er góð")).toBe(true);
+  });
+
+  it("search 'Obama' finds doc with 'Obamas' (genitive)", () => {
+    expect(searchMatches("Obama", "Ræða Obamas var löng")).toBe(true);
+  });
+
+  it("search 'Trump' finds doc with 'Trumps' (genitive)", () => {
+    expect(searchMatches("Trump", "Stefna Trumps breyttist")).toBe(true);
+  });
+
+  it("search 'Biden' finds doc with 'Bidens' (genitive)", () => {
+    expect(searchMatches("Biden", "Ríkisstjórn Bidens")).toBe(true);
+  });
+
+  it("search 'Lopez' finds doc with 'Lopez' (unchanged foreign name)", () => {
+    expect(searchMatches("Lopez", "Jennifer Lopez kom til landsins")).toBe(true);
+  });
+
+  it("search 'Duran' finds inflected forms", () => {
+    // Even if Duran gets Icelandic endings like Durans
+    expect(searchMatches("Duran", "Tónlist Durans er frábær")).toBe(true);
+  });
+});
+
 describe("Search UX: Known limitations", () => {
   let lemmatizer: BinaryLemmatizer;
   let splitter: CompoundSplitter;

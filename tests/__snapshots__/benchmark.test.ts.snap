@@ -32,20 +32,20 @@ exports[`Processing Pipeline > Benchmark Metrics > LITERARY paragraph > LITERARY
 
 exports[`Processing Pipeline > Benchmark Metrics > NEWS paragraph > NEWS metrics snapshot 1`] = `
 {
-  "ambiguityRate": 0.58,
+  "ambiguityRate": 0.63,
   "compoundsFound": 9,
-  "coverage": 0.71,
+  "coverage": 0.75,
   "entitiesSkipped": 0,
-  "uniqueLemmas": 59,
+  "uniqueLemmas": 63,
 }
 `;
 
 exports[`Processing Pipeline > Benchmark Metrics > TECHNICAL paragraph > TECHNICAL metrics snapshot 1`] = `
 {
-  "ambiguityRate": 0.61,
+  "ambiguityRate": 0.67,
   "compoundsFound": 6,
-  "coverage": 0.72,
+  "coverage": 0.78,
   "entitiesSkipped": 0,
-  "uniqueLemmas": 44,
+  "uniqueLemmas": 47,
 }
 `;

@@ -33,23 +33,34 @@ const SKIP_KINDS = new Set([
   "unknown",
 ]);
 
+/**
+ * Icelandic case suffixes to strip from unknown words (longest first).
+ * Ordered by length to prefer longer matches.
+ */
 const UNKNOWN_SUFFIXES = [
-  "arinnar",
-  "anna",
-  "unum",
-  "um",
-  "ir",
-  "ar",
-  "ur",
-  "a",
-  "i",
-  "ið",
-  "inn",
-  "in",
+  // Definite + case (longest)
+  "arinnar", // fem gen def
+  "inum", // masc/neut dat def
+  "anna", // gen pl def
+  "unum", // dat pl def
+  "sins", // masc gen def (rarely used on foreign names)
+  // Definite
+  "inn", // masc nom def
+  "ins", // masc/neut gen def
+  "ið", // neut nom/acc def
+  "in", // fem nom def
+  // Case endings (common on foreign names)
+  "um", // dat pl / dat sg (rare)
+  "ir", // masc nom pl
+  "ar", // fem nom pl / masc gen sg
+  "ur", // masc nom sg
+  "s", // genitive (very common on foreign names: Simons, Obamas)
+  "a", // fem acc/dat sg, weak masc acc sg
+  "i", // dat sg (weak), masc nom pl (some classes)
 ];
 
-const MIN_UNKNOWN_WORD_LENGTH = 6;
-const MIN_STRIPPED_LENGTH = 3;
+const MIN_UNKNOWN_WORD_LENGTH = 4;
+const MIN_STRIPPED_LENGTH = 2;
 const MAX_SUFFIX_STRIPS = 2;
 
 /**
@@ -107,6 +118,12 @@ export interface ProcessOptions {
    * Default: true
    */
   alwaysTryCompounds?: boolean;
+  /**
+   * Strip Icelandic suffixes from unknown words to find base forms.
+   * Useful for foreign names: "Simons" → "simon", "Obamas" → "obama".
+   * Default: true
+   */
+  stripUnknownSuffixes?: boolean;
 }
 
 /**
@@ -127,6 +144,7 @@ export function processText(
     compoundSplitter,
     includeNumbers = false,
     alwaysTryCompounds = true,
+    stripUnknownSuffixes = true,
   } = options;
 
   // Step 1: Tokenize
@@ -136,64 +154,82 @@ export function processText(
   const results: ProcessedToken[] = [];
   const wordTokens: { index: number; token: Token }[] = [];
   const lemmaCache = new Map<string, string[]>();
-  const allowSuffixFallback =
-    "bigramCountValue" in lemmatizer
-      ? (lemmatizer as { bigramCountValue?: number }).bigramCountValue === 0
-      : false;
 
   const isUnknownLemma = (raw: string, lemmas: string[]): boolean =>
     lemmas.length === 1 && lemmas[0] === raw.toLowerCase();
 
+  /**
+   * Try stripping Icelandic suffixes from unknown words.
+   * Returns known lemmas if found, otherwise returns the stripped form
+   * as a candidate (useful for foreign names like "Simons" → "simon").
+   */
   const trySuffixFallback = (raw: string): string[] | null => {
     let current = raw;
-    let strippedCandidate: string | null = null;
+    const candidates: string[] = [];
 
     for (let attempt = 0; attempt < MAX_SUFFIX_STRIPS; attempt++) {
       const lower = current.toLowerCase();
-      strippedCandidate = null;
+      let bestStripped: string | null = null;
 
       for (const suffix of UNKNOWN_SUFFIXES) {
         if (!lower.endsWith(suffix)) continue;
 
-        const next = current.slice(0, current.length - suffix.length);
-        if (next.length < MIN_STRIPPED_LENGTH) continue;
+        const stripped = current.slice(0, current.length - suffix.length);
+        if (stripped.length < MIN_STRIPPED_LENGTH) continue;
 
-        const nextLemmas = lemmatizer.lemmatize(next);
-        if (!isUnknownLemma(next, nextLemmas)) {
-          return nextLemmas;
+        const strippedLemmas = lemmatizer.lemmatize(stripped);
+
+        // If stripped form is known, return those lemmas
+        if (!isUnknownLemma(stripped, strippedLemmas)) {
+          // Include any candidates we've collected plus the known lemmas
+          return [...new Set([...candidates, ...strippedLemmas])];
         }
 
-        if (!strippedCandidate) {
-          strippedCandidate = next;
+        // Track the first valid stripped form for this iteration
+        if (!bestStripped) {
+          bestStripped = stripped;
+          // Add the stripped form as a candidate (for foreign names)
+          candidates.push(stripped.toLowerCase());
         }
       }
 
-      if (!strippedCandidate || strippedCandidate.length < MIN_UNKNOWN_WORD_LENGTH) {
+      // If we found a stripped form but it's still unknown, try stripping again
+      if (!bestStripped || bestStripped.length < MIN_UNKNOWN_WORD_LENGTH) {
         break;
       }
 
-      current = strippedCandidate;
+      current = bestStripped;
     }
 
-    return null;
+    // Return collected candidates if any (stripped unknown forms)
+    return candidates.length > 0 ? [...new Set(candidates)] : null;
   };
 
   const getLemmas = (raw: string): string[] => {
     const key = raw.toLowerCase();
     const cached = lemmaCache.get(key);
     if (cached) return cached;
+
     const lemmas = lemmatizer.lemmatize(raw);
+
+    // For unknown words, try suffix stripping to find base forms.
+    // Must check BOTH isUnknownLemma (returns self) AND !isKnown (not in dictionary)
+    // to avoid stripping suffixes from words like "fyrir" that are their own lemma.
     if (
-      allowSuffixFallback &&
+      stripUnknownSuffixes &&
       isUnknownLemma(raw, lemmas) &&
+      !lemmatizer.isKnown(raw) &&
       raw.length >= MIN_UNKNOWN_WORD_LENGTH
     ) {
       const fallbackLemmas = trySuffixFallback(raw);
       if (fallbackLemmas) {
-        lemmaCache.set(key, fallbackLemmas);
-        return fallbackLemmas;
+        // Include both original lowercased and stripped forms
+        const combined = [...new Set([...lemmas, ...fallbackLemmas])];
+        lemmaCache.set(key, combined);
+        return combined;
       }
     }
+
     lemmaCache.set(key, lemmas);
     return lemmas;
   };
