@@ -91,3 +91,4 @@ export {
   type ProcessingStrategy,
   type ProcessingMetrics,
 } from "./pipeline.js";
+export { normalizeToken } from "./normalizers.js";

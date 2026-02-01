@@ -9,6 +9,7 @@ import { tokenize, type Token } from "tokenize-is";
 import { Disambiguator, type DisambiguatedToken } from "./disambiguate.js";
 import { CompoundSplitter, type CompoundSplit } from "./compounds.js";
 import { STOPWORDS_IS, isContextualStopword } from "./stopwords.js";
+import { normalizeToken } from "./normalizers.js";
 import type { LemmatizerLike, BigramProvider } from "./types.js";
 
 /**
@@ -216,19 +217,6 @@ export function processText(
       continue;
     }
 
-    // Handle numbers if requested
-    if (token.kind === "number" || token.kind === "ordinal") {
-      if (includeNumbers) {
-        results.push({
-          original: token.text ?? "",
-          kind: token.kind,
-          lemmas: [],
-          isEntity: false,
-        });
-      }
-      continue;
-    }
-
     // Handle word tokens
     if (LEMMATIZABLE_KINDS.has(token.kind)) {
       const tokenText = token.text ?? "";
@@ -261,7 +249,23 @@ export function processText(
       continue;
     }
 
-    // Pass through other tokens (time, date, url, etc.)
+    // Handle non-word tokens with normalization (numbers, dates, URLs, etc.)
+    const normalized = normalizeToken(token);
+    if (normalized.length > 0) {
+      // Numbers/ordinals only included if includeNumbers is set
+      if ((token.kind === "number" || token.kind === "ordinal") && !includeNumbers) {
+        continue;
+      }
+      results.push({
+        original: token.text ?? "",
+        kind: token.kind,
+        lemmas: normalized,
+        isEntity: false,
+      });
+      continue;
+    }
+
+    // Pass through other tokens with no normalization
     results.push({
       original: token.text ?? "",
       kind: token.kind,
