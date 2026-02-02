@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-02-02
+
+### Added
+
+- **Search result highlighting**: New `highlight(query, document, lemmatizer)` function finds and marks query matches across inflections
+  - Returns `TextSegment[]` with `text` and `highlight` boolean for custom rendering
+  - Matches work across word forms: searching "hestur" highlights "Hestarnir"
+- **Snippet extraction**: New `extractSnippets(query, document, lemmatizer, options)` for long documents
+  - Extracts best matching fragments ranked by match density
+  - Options: `snippetWords` (default 15), `maxSnippets` (default 3), `ellipsis` (default "…")
+  - Respects sentence boundaries when possible
+  - Returns `Snippet[]` with `text`, `segments`, `score`, and character offsets
+- `ProcessedToken.span` now includes character offsets when `includeOffsets: true`
+- New exports: `highlight`, `extractSnippets`, `TextSegment`, `HighlightResult`, `HighlightOptions`, `Snippet`, `SnippetOptions`, `SnippetResult`, `TokenSpan`
+
+### Changed
+
+- Requires `tokenize-is@0.2.0` which adds offset tracking through the tokenization pipeline
+
 ## [0.9.0] - 2026-02-01
 
 ### Added

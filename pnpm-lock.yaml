@@ -15,8 +15,8 @@ importers:
         specifier: ^0.0.0
         version: 0.0.0
       tokenize-is:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.2.0
+        version: 0.2.0
       trie-mapping:
         specifier: ^4.0.0
         version: 4.0.0
@@ -685,8 +685,8 @@ packages:
     resolution: {integrity: sha512-PSkbLUoxOFRzJYjjxHJt9xro7D+iilgMX/C9lawzVuYiIdcihh9DXmVibBe8lmcFrRi/VzlPjBxbN7rH24q8/Q==}
     engines: {node: '>=14.0.0'}
 
-  tokenize-is@0.1.0:
-    resolution: {integrity: sha512-ET2AQBa7dlXQle9wrrSbVHz/SQjNhxTeVZQ+RRf5FdgfFSW7q53qt0jchzDPyLa2j8Ww2rIjaiIR6HXxit/BgQ==}
+  tokenize-is@0.2.0:
+    resolution: {integrity: sha512-oe6c5oIuD+AOUxGDhjM5m9OFhe+/LJ+wWZQ2oIG9hR5NNZAwEvm6IWiUN4BxvPrQZLgklela3DYj86PAY3o3Nw==}
 
   tree-kill@1.2.2:
     resolution: {integrity: sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==}
@@ -1343,7 +1343,7 @@ snapshots:
 
   tinyrainbow@3.0.3: {}
 
-  tokenize-is@0.1.0: {}
+  tokenize-is@0.2.0: {}
 
   tree-kill@1.2.2: {}
 

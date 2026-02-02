@@ -3,7 +3,7 @@
 Fast Icelandic lemmatization for JavaScript. Built for search indexing.
 
 ```typescript
-import { BinaryLemmatizer, extractIndexableLemmas, buildSearchQuery } from "lemma-is";
+import { BinaryLemmatizer, extractIndexableLemmas, buildSearchQuery, highlight } from "lemma-is";
 
 lemmatizer.lemmatize("börnin");   // → ["barn"]
 lemmatizer.lemmatize("keypti");   // → ["kaupa"]
@@ -238,6 +238,69 @@ const sql = `SELECT * FROM documents WHERE search_vector @@ to_tsquery('simple',
 await db.query(sql, [query]);
 ```
 
+## Highlighting Search Results
+
+After finding matching documents, highlight the query terms in the original text:
+
+```typescript
+import { highlight } from "lemma-is";
+
+const result = highlight("hestur", "Hestarnir eru á beitinni.", lemmatizer);
+// result.matchCount = 1
+// result.segments = [
+//   { text: "Hestarnir", highlight: true },
+//   { text: " eru á beitinni.", highlight: false }
+// ]
+```
+
+The highlight function lemmatizes both query and document, finding matches across inflections. "hestur" matches "Hestarnir" because both normalize to the lemma "hestur".
+
+Render the segments however fits your UI:
+
+```typescript
+// React example
+result.segments.map((seg, i) =>
+  seg.highlight ? <mark key={i}>{seg.text}</mark> : seg.text
+);
+
+// HTML string
+result.segments.map(seg =>
+  seg.highlight ? `<mark>${seg.text}</mark>` : seg.text
+).join("");
+```
+
+### Snippet Extraction
+
+For long documents, extract the most relevant snippets instead of highlighting the entire text:
+
+```typescript
+import { extractSnippets } from "lemma-is";
+
+const doc = `Langt áður fyrr bjó maður á bæ. Hestarnir voru margir og góðir.
+Þeir gengu á fjöllum. Maðurinn unni hestunum sínum mjög.`;
+
+const result = extractSnippets("hestur", doc, lemmatizer, {
+  snippetWords: 10,   // ~10 words per snippet
+  maxSnippets: 3,     // up to 3 snippets
+  ellipsis: "…",      // truncation marker
+});
+
+// result.totalMatches = 2
+// result.snippets[0] = {
+//   text: "…Hestarnir voru margir og góðir.…",
+//   segments: [
+//     { text: "…", highlight: false },
+//     { text: "Hestarnir", highlight: true },
+//     { text: " voru margir og góðir.…", highlight: false }
+//   ],
+//   score: 11,  // match density score
+//   start: 32,  // offset in original
+//   end: 64
+// }
+```
+
+Snippets are ranked by match density and selected to avoid overlap. Use `segments` for custom rendering or `text` for display.
+
 ## Limitations
 
 This is an early effort with known limitations.
@@ -298,7 +361,7 @@ For search indexing, use `indexAllCandidates: true` (the default) to index all l
 
 ### No Query Expansion
 
-You can go word → lemma but not lemma → words. This affects search result highlighting—if a user searches "hestur" and the document contains "hestinum", you can't easily highlight the match.
+You can go word → lemma but not lemma → words. If you need to show all inflected forms of a lemma, you'll need to build a reverse mapping from BÍN data.
 
 ## Data
 

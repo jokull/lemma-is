@@ -5,7 +5,7 @@
  * (abbreviations, dates, times, etc.) before lemmatization.
  */
 
-import { tokenize, type Token } from "tokenize-is";
+import { tokenize, type Token, type TokenSpan } from "tokenize-is";
 import { Disambiguator, type DisambiguatedToken } from "./disambiguate.js";
 import { CompoundSplitter, type CompoundSplit } from "./compounds.js";
 import { STOPWORDS_IS, isContextualStopword } from "./stopwords.js";
@@ -83,6 +83,8 @@ export interface ProcessedToken {
   compoundSplit?: CompoundSplit;
   /** Lemmas derived from compound parts (if any) */
   compoundLemmas?: string[];
+  /** Character offsets in original text (when includeOffsets is true) */
+  span?: TokenSpan;
 }
 
 /**
@@ -124,6 +126,12 @@ export interface ProcessOptions {
    * Default: true
    */
   stripUnknownSuffixes?: boolean;
+  /**
+   * Include character offsets (start/end) on each token.
+   * Useful for highlighting matched terms in original text.
+   * Default: false
+   */
+  includeOffsets?: boolean;
 }
 
 /**
@@ -145,10 +153,11 @@ export function processText(
     includeNumbers = false,
     alwaysTryCompounds = true,
     stripUnknownSuffixes = true,
+    includeOffsets = false,
   } = options;
 
   // Step 1: Tokenize
-  const tokens = tokenize(text);
+  const tokens = tokenize(text, { includeOffsets });
 
   // Step 2: Process each token
   const results: ProcessedToken[] = [];
@@ -249,6 +258,7 @@ export function processText(
         kind: token.kind,
         lemmas: [],
         isEntity: true,
+        span: token.span,
       });
       continue;
     }
@@ -263,6 +273,7 @@ export function processText(
         kind: token.kind,
         lemmas,
         isEntity: false,
+        span: token.span,
       };
 
       // Try compound splitting
@@ -312,6 +323,7 @@ export function processText(
         kind: token.kind,
         lemmas: normalized,
         isEntity: false,
+        span: token.span,
       });
       continue;
     }
@@ -322,6 +334,7 @@ export function processText(
       kind: token.kind,
       lemmas: [],
       isEntity: false,
+      span: token.span,
     });
   }
 
@@ -697,4 +710,411 @@ export function runBenchmark(
     uniqueLemmas: lemmas.size,
     timeMs,
   };
+}
+
+/**
+ * A text segment, either plain or highlighted.
+ */
+export interface TextSegment {
+  text: string;
+  highlight: boolean;
+}
+
+/** Re-export TokenSpan for consumers */
+export type { TokenSpan } from "tokenize-is";
+
+/**
+ * Result of highlighting a document.
+ */
+export interface HighlightResult {
+  /** All segments in order */
+  segments: TextSegment[];
+  /** Number of matches found */
+  matchCount: number;
+}
+
+/**
+ * Options for highlighting.
+ */
+export interface HighlightOptions extends ProcessOptions {
+  /**
+   * Merge adjacent highlighted segments.
+   * Default: true
+   */
+  mergeAdjacent?: boolean;
+}
+
+/**
+ * Find and highlight query matches in a document.
+ *
+ * @param query - Search query text
+ * @param document - Document to highlight
+ * @param lemmatizer - Lemmatizer instance
+ * @param options - Processing options
+ * @returns Segments with highlight flags and match count
+ *
+ * @example
+ * ```ts
+ * const result = highlight("hestur", "Hestarnir eru á beitinni.", lemmatizer);
+ * // result.segments = [
+ * //   { text: "", highlight: false },
+ * //   { text: "Hestarnir", highlight: true },
+ * //   { text: " eru á beitinni.", highlight: false }
+ * // ]
+ * // result.matchCount = 1
+ * ```
+ */
+export function highlight(
+  query: string,
+  document: string,
+  lemmatizer: LemmatizerLike,
+  options: HighlightOptions = {}
+): HighlightResult {
+  const { mergeAdjacent = true, ...processOptions } = options;
+
+  // Extract query lemmas
+  const queryLemmas = extractIndexableLemmas(query, lemmatizer, processOptions);
+  if (queryLemmas.size === 0) {
+    return { segments: [{ text: document, highlight: false }], matchCount: 0 };
+  }
+
+  // Process document with offsets
+  const tokens = processText(document, lemmatizer, { ...processOptions, includeOffsets: true });
+
+  // Find matching tokens
+  const matches: Array<{ start: number; end: number }> = [];
+  for (const token of tokens) {
+    if (!token.span || token.isEntity) continue;
+
+    // Check if any of the token's lemmas match the query
+    const hasMatch = token.lemmas.some((lemma) => queryLemmas.has(lemma));
+    if (hasMatch) {
+      matches.push({ start: token.span.start, end: token.span.end });
+    }
+  }
+
+  if (matches.length === 0) {
+    return { segments: [{ text: document, highlight: false }], matchCount: 0 };
+  }
+
+  // Sort by start position and merge overlapping spans
+  matches.sort((a, b) => a.start - b.start);
+  const merged: Array<{ start: number; end: number }> = [];
+  for (const match of matches) {
+    const last = merged[merged.length - 1];
+    if (last && match.start <= last.end) {
+      // Overlapping or adjacent - extend
+      last.end = Math.max(last.end, match.end);
+    } else {
+      merged.push({ ...match });
+    }
+  }
+
+  // Build segments
+  const segments: TextSegment[] = [];
+  let cursor = 0;
+
+  for (const span of merged) {
+    // Add non-highlighted segment before this match
+    if (span.start > cursor) {
+      segments.push({ text: document.slice(cursor, span.start), highlight: false });
+    }
+    // Add highlighted segment
+    segments.push({ text: document.slice(span.start, span.end), highlight: true });
+    cursor = span.end;
+  }
+
+  // Add remaining non-highlighted text
+  if (cursor < document.length) {
+    segments.push({ text: document.slice(cursor), highlight: false });
+  }
+
+  // Optionally merge adjacent segments of same type
+  if (mergeAdjacent && segments.length > 1) {
+    const result: TextSegment[] = [segments[0]];
+    for (let i = 1; i < segments.length; i++) {
+      const prev = result[result.length - 1];
+      const curr = segments[i];
+      if (prev.highlight === curr.highlight) {
+        prev.text += curr.text;
+      } else {
+        result.push(curr);
+      }
+    }
+    return { segments: result, matchCount: merged.length };
+  }
+
+  return { segments, matchCount: merged.length };
+}
+
+/**
+ * A snippet extracted from a document with highlighted matches.
+ */
+export interface Snippet {
+  /** The snippet text (use segments for structured rendering) */
+  text: string;
+  /** Structured segments for custom rendering */
+  segments: TextSegment[];
+  /** Match density score (higher = more relevant) */
+  score: number;
+  /** Character offset where snippet starts in original document */
+  start: number;
+  /** Character offset where snippet ends in original document */
+  end: number;
+}
+
+/**
+ * Options for snippet extraction.
+ */
+export interface SnippetOptions extends ProcessOptions {
+  /** Target words per snippet (default: 15) */
+  snippetWords?: number;
+  /** Maximum snippets to return (default: 3) */
+  maxSnippets?: number;
+  /** Truncation marker (default: "…") */
+  ellipsis?: string;
+  /** Try to break on sentence boundaries (default: true) */
+  respectSentences?: boolean;
+}
+
+/**
+ * Result of snippet extraction.
+ */
+export interface SnippetResult {
+  /** Extracted snippets, sorted by relevance */
+  snippets: Snippet[];
+  /** Total matches in document */
+  totalMatches: number;
+}
+
+/**
+ * Extract the best matching snippets from a document.
+ *
+ * @param query - Search query text
+ * @param document - Document to extract snippets from
+ * @param lemmatizer - Lemmatizer instance
+ * @param options - Snippet options
+ * @returns Best matching snippets with highlight info
+ *
+ * @example
+ * ```ts
+ * const result = extractSnippets(
+ *   "hestur",
+ *   "Langt áður fyrr bjó maður á bæ. Hestarnir voru margir og góðir. Þeir gengu á fjöllum.",
+ *   lemmatizer
+ * );
+ * // result.snippets[0].text = "…Hestarnir voru margir og góðir.…"
+ * // result.snippets[0].segments = [
+ * //   { text: "…", highlight: false },
+ * //   { text: "Hestarnir", highlight: true },
+ * //   { text: " voru margir og góðir.…", highlight: false }
+ * // ]
+ * ```
+ */
+export function extractSnippets(
+  query: string,
+  document: string,
+  lemmatizer: LemmatizerLike,
+  options: SnippetOptions = {}
+): SnippetResult {
+  const {
+    snippetWords = 15,
+    maxSnippets = 3,
+    ellipsis = "…",
+    respectSentences = true,
+    ...processOptions
+  } = options;
+
+  // Extract query lemmas
+  const queryLemmas = extractIndexableLemmas(query, lemmatizer, processOptions);
+  if (queryLemmas.size === 0) {
+    return { snippets: [], totalMatches: 0 };
+  }
+
+  // Process document with offsets
+  const tokens = processText(document, lemmatizer, { ...processOptions, includeOffsets: true });
+
+  // Find matching tokens with their spans
+  const matches: Array<{ start: number; end: number; lemmas: string[] }> = [];
+  for (const token of tokens) {
+    if (!token.span || token.isEntity) continue;
+    const matchingLemmas = token.lemmas.filter((lemma) => queryLemmas.has(lemma));
+    if (matchingLemmas.length > 0) {
+      matches.push({ start: token.span.start, end: token.span.end, lemmas: matchingLemmas });
+    }
+  }
+
+  if (matches.length === 0) {
+    return { snippets: [], totalMatches: 0 };
+  }
+
+  // Build word boundaries for snippet windowing
+  const wordBoundaries: Array<{ start: number; end: number }> = [];
+  for (const token of tokens) {
+    if (token.span && token.kind === "word") {
+      wordBoundaries.push({ start: token.span.start, end: token.span.end });
+    }
+  }
+
+  // Find sentence boundaries if requested
+  const sentenceBoundaries: number[] = [0];
+  if (respectSentences) {
+    const sentenceEnders = /[.!?]+[\s\n]+/g;
+    let match: RegExpExecArray | null;
+    while ((match = sentenceEnders.exec(document)) !== null) {
+      sentenceBoundaries.push(match.index + match[0].length);
+    }
+    sentenceBoundaries.push(document.length);
+  }
+
+  // Score windows around each match
+  interface Window {
+    start: number;
+    end: number;
+    matchCount: number;
+    uniqueLemmas: Set<string>;
+    score: number;
+  }
+
+  const windows: Window[] = [];
+  const halfWindow = Math.floor(snippetWords / 2);
+
+  for (let i = 0; i < matches.length; i++) {
+    const centerMatch = matches[i];
+
+    // Find word index of this match
+    const centerWordIdx = wordBoundaries.findIndex(
+      (wb) => wb.start <= centerMatch.start && wb.end >= centerMatch.end
+    );
+    if (centerWordIdx === -1) continue;
+
+    // Determine word window
+    const startWordIdx = Math.max(0, centerWordIdx - halfWindow);
+    const endWordIdx = Math.min(wordBoundaries.length - 1, centerWordIdx + halfWindow);
+
+    let windowStart = wordBoundaries[startWordIdx].start;
+    let windowEnd = wordBoundaries[endWordIdx].end;
+
+    // Snap to sentence boundaries if possible
+    if (respectSentences) {
+      for (let j = sentenceBoundaries.length - 1; j >= 0; j--) {
+        if (sentenceBoundaries[j] <= windowStart) {
+          const sentenceStart = sentenceBoundaries[j];
+          // Only snap if it doesn't make the window too long
+          if (windowEnd - sentenceStart < snippetWords * 10) {
+            windowStart = sentenceStart;
+          }
+          break;
+        }
+      }
+      for (let j = 0; j < sentenceBoundaries.length; j++) {
+        if (sentenceBoundaries[j] >= windowEnd) {
+          const sentenceEnd = sentenceBoundaries[j];
+          if (sentenceEnd - windowStart < snippetWords * 10) {
+            windowEnd = sentenceEnd;
+          }
+          break;
+        }
+      }
+    }
+
+    // Count matches and unique lemmas in this window
+    const uniqueLemmas = new Set<string>();
+    let matchCount = 0;
+    for (const m of matches) {
+      if (m.start >= windowStart && m.end <= windowEnd) {
+        matchCount++;
+        for (const lemma of m.lemmas) {
+          uniqueLemmas.add(lemma);
+        }
+      }
+    }
+
+    // Score: prioritize unique lemma coverage, then density
+    const score = uniqueLemmas.size * 10 + matchCount;
+
+    windows.push({ start: windowStart, end: windowEnd, matchCount, uniqueLemmas, score });
+  }
+
+  // Sort by score descending
+  windows.sort((a, b) => b.score - a.score);
+
+  // Select non-overlapping windows
+  const selectedWindows: Window[] = [];
+  for (const win of windows) {
+    if (selectedWindows.length >= maxSnippets) break;
+    // Check for overlap with already selected windows
+    const overlaps = selectedWindows.some(
+      (sw) => !(win.end <= sw.start || win.start >= sw.end)
+    );
+    if (!overlaps) {
+      selectedWindows.push(win);
+    }
+  }
+
+  // Sort selected windows by document position
+  selectedWindows.sort((a, b) => a.start - b.start);
+
+  // Build snippets
+  const snippets: Snippet[] = [];
+
+  for (const win of selectedWindows) {
+    const snippetText = document.slice(win.start, win.end).trim();
+
+    // Build segments for this snippet
+    const snippetMatches = matches.filter((m) => m.start >= win.start && m.end <= win.end);
+    const segments: TextSegment[] = [];
+    let cursor = win.start;
+
+    // Add leading ellipsis if not at document start
+    const needsLeadingEllipsis = win.start > 0;
+    const needsTrailingEllipsis = win.end < document.length;
+
+    if (needsLeadingEllipsis) {
+      segments.push({ text: ellipsis, highlight: false });
+    }
+
+    for (const m of snippetMatches) {
+      if (m.start > cursor) {
+        segments.push({ text: document.slice(cursor, m.start), highlight: false });
+      }
+      segments.push({ text: document.slice(m.start, m.end), highlight: true });
+      cursor = m.end;
+    }
+
+    if (cursor < win.end) {
+      segments.push({ text: document.slice(cursor, win.end), highlight: false });
+    }
+
+    if (needsTrailingEllipsis) {
+      // Append ellipsis to last segment if not highlighted, else add new segment
+      const last = segments[segments.length - 1];
+      if (last && !last.highlight) {
+        last.text = last.text.trimEnd() + ellipsis;
+      } else {
+        segments.push({ text: ellipsis, highlight: false });
+      }
+    }
+
+    // Trim whitespace from first non-ellipsis segment
+    if (segments.length > 0) {
+      const firstIdx = needsLeadingEllipsis ? 1 : 0;
+      if (segments[firstIdx]) {
+        segments[firstIdx].text = segments[firstIdx].text.trimStart();
+      }
+    }
+
+    // Build text representation
+    const text = segments.map((s) => s.text).join("");
+
+    snippets.push({
+      text,
+      segments,
+      score: win.score,
+      start: win.start,
+      end: win.end,
+    });
+  }
+
+  return { snippets, totalMatches: matches.length };
 }

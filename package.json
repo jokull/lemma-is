@@ -1,6 +1,6 @@
 {
   "name": "lemma-is",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Icelandic word form to lemma lookup for browser and Node.js",
   "keywords": [
     "icelandic",
@@ -49,7 +49,7 @@
   "dependencies": {
     "dawg-lookup": "^2.2.1",
     "dawg-set": "^0.0.0",
-    "tokenize-is": "^0.1.0",
+    "tokenize-is": "^0.2.0",
     "trie-mapping": "^4.0.0"
   }
 }
