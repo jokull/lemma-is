@@ -209,7 +209,8 @@ const grammarRulesPhase: DisambiguationPhase = {
       candidatesWithMorph,
       context.prevWord,
       context.nextWordMorph ?? [],
-      disambiguator.lemmatizer
+      disambiguator.lemmatizer,
+      context.nextWord
     );
 
     if (result) {

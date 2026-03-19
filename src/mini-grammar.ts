@@ -21,6 +21,54 @@ import type {
  */
 export interface GrammarLemmatizerLike {
   lemmatizeWithPOS?(word: string): LemmaWithPOS[];
+  lemmatizeWithMorph?(word: string): LemmaWithMorph[];
+}
+
+/**
+ * Infer grammatical case from Icelandic definite article suffixes.
+ *
+ * When morph data lacks case info (e.g., core binary), we can often
+ * determine case from the word form itself. Definite article suffixes
+ * in Icelandic are highly regular:
+ *
+ * Nominative: -inn (m.sg), -in (f.sg), -ið (n.sg), -nir (m.pl), -nar (f.pl), -in (n.pl)
+ * Accusative: -inn (m.sg), -ina (f.sg), -ið (n.sg), -na (m.pl), -nar (f.pl), -in (n.pl)
+ * Dative: -inum (m.sg), -inni (f.sg), -inu (n.sg), -unum (pl)
+ * Genitive: -ins (m/n.sg), -innar (f.sg), -nna (pl)
+ *
+ * Note: nominative and accusative overlap heavily. The key distinction
+ * for "á" disambiguation is dative vs non-dative: dative after "á"
+ * is unambiguously preposition.
+ */
+export function inferCaseFromSuffix(word: string): Set<GrammaticalCase> {
+  const w = word.toLowerCase();
+  const cases = new Set<GrammaticalCase>();
+
+  // Dative definite (most distinctive — check first, longest match first)
+  if (w.endsWith("unum") || w.endsWith("inum") || w.endsWith("inni") || w.endsWith("inu")) {
+    cases.add("þgf");
+    return cases; // Dative suffixes are unambiguous
+  }
+
+  // Genitive definite
+  if (w.endsWith("innar") || w.endsWith("nna") || w.endsWith("ins")) {
+    cases.add("ef");
+    return cases;
+  }
+
+  // Nominative/accusative definite (these overlap, so return both)
+  if (w.endsWith("inn") || w.endsWith("ið") || w.endsWith("nar") || w.endsWith("nir")) {
+    cases.add("nf");
+    cases.add("þf");
+    return cases;
+  }
+  if (w.endsWith("ina")) {
+    cases.add("þf"); // Accusative feminine definite
+    return cases;
+  }
+
+  // Bare noun endings (less reliable, skip)
+  return cases;
 }
 
 /**
@@ -260,12 +308,117 @@ export function applyNounAfterPrepositionRule(
 }
 
 /**
+ * Apply subject-verb-object rule to disambiguate.
+ *
+ * When the previous word has a nominative reading (subject), the current word
+ * is ambiguous between verb and preposition, and the next word is accusative,
+ * prefer the verb reading. This handles patterns like:
+ * - "Jón á bílinn" → á = eiga (Jón owns the car)
+ * - "Barnið á leikfangið" → á = eiga (the child owns the toy)
+ *
+ * Key linguistic insight from Greynir: "á" + dative (þgf) is unambiguously
+ * a preposition since "eiga" doesn't take dative objects. But "á" + accusative
+ * (þf) is ambiguous — it could be the preposition (direction) or the verb
+ * "eiga" (to own, with accusative object). A nominative subject tips the scale.
+ *
+ * @param candidates - All possible readings of the current word
+ * @param prevWord - Previous word (raw form)
+ * @param nextWordMorph - Morphological analyses of the next word
+ * @param lemmatizer - Lemmatizer for looking up previous word morphology
+ * @returns GrammarRuleMatch if a rule applies, null otherwise
+ */
+export function applySubjectVerbRule(
+  candidates: LemmaWithMorph[],
+  prevWord: string | null,
+  nextWordMorph: LemmaWithMorph[],
+  lemmatizer: GrammarLemmatizerLike | null,
+  nextWord: string | null = null
+): GrammarRuleMatch | null {
+  if (!prevWord || !lemmatizer?.lemmatizeWithMorph) return null;
+  if (!nextWord && nextWordMorph.length === 0) return null;
+
+  // Only applies when current word has both verb and preposition candidates
+  const verbCandidates = candidates.filter((c) => c.pos === "so");
+  const prepCandidates = candidates.filter((c) => c.pos === "fs");
+  if (verbCandidates.length === 0 || prepCandidates.length === 0) return null;
+
+  // Determine next word's case — from morph data or suffix inference
+  let nextHasDative = nextWordMorph.some((m) => m.morph?.case === "þgf");
+  let nextHasNonDative = nextWordMorph.some(
+    (m) => m.morph?.case && m.morph.case !== "þgf"
+  );
+  const nextIsNoun = nextWordMorph.some((m) => m.pos === "no");
+
+  // If morph data lacks case info, infer from suffix
+  if (!nextHasDative && !nextHasNonDative && nextWord) {
+    const nextSuffixCases = inferCaseFromSuffix(nextWord);
+    nextHasDative = nextSuffixCases.has("þgf");
+    nextHasNonDative = nextSuffixCases.size > 0 && !nextSuffixCases.has("þgf")
+      || (nextSuffixCases.size > 1); // has both dative and non-dative
+    // If no suffix detected, bare noun — could be any case, allow the rule
+    if (nextSuffixCases.size === 0 && nextIsNoun) {
+      nextHasNonDative = true;
+    }
+  }
+
+  // If next word is ONLY dative, "á" is unambiguously preposition — bail out
+  if (nextHasDative && !nextHasNonDative) return null;
+
+  // Next word must be a noun or part of a noun phrase (adjective, numeral)
+  // "á stóran bát" → "stóran" is adjective modifying "bát"
+  // "á þrjá hesta" → "þrjá" is numeral modifying "hesta"
+  const nextIsNounPhrase = nextIsNoun
+    || nextWordMorph.some((m) => m.pos === "lo" || m.pos === "to");
+  if (!nextIsNounPhrase) return null;
+
+  // Check if previous word is a confident nominative subject.
+  const prevMorph = lemmatizer.lemmatizeWithMorph(prevWord);
+  const prevHasNoun = prevMorph.some((m) => m.pos === "no");
+  const prevHasVerb = prevMorph.some((m) => m.pos === "so");
+
+  if (!prevHasNoun) return null;
+
+  // Use morph case data if available
+  let prevHasNominative = prevMorph.some(
+    (m) => m.morph?.case === "nf" && (m.pos === "no" || m.pos === "fn")
+  );
+
+  // Fallback: infer from suffix if morph data lacks case
+  if (!prevHasNominative) {
+    const prevSuffixCases = inferCaseFromSuffix(prevWord);
+    if (prevSuffixCases.has("nf")) {
+      // Definite suffix like -inn/-ið/-nar confirms it's a noun
+      // Even if it also has verb readings, the suffix is a strong noun signal
+      prevHasNominative = true;
+    } else if (prevSuffixCases.size === 0 && !prevHasVerb) {
+      // Bare noun with NO verb readings (e.g., "pabbi", "Jón", "konráð")
+      // Base form of nouns is nominative in Icelandic
+      prevHasNominative = true;
+    }
+    // If bare noun WITH verb readings (e.g., "búa"), don't assume nominative
+  }
+
+  if (!prevHasNominative) return null;
+
+  const eigaCandidate = verbCandidates.find((c) => c.lemma === "eiga");
+  const verbCandidate = eigaCandidate ?? verbCandidates[0];
+
+  return {
+    lemma: verbCandidate.lemma,
+    pos: "so",
+    rule: "subject+verb+obj",
+    confidence: 0.85,
+  };
+}
+
+/**
  * Apply all mini-grammar rules in sequence.
  *
  * Rules are applied in order of specificity:
- * 1. Preposition + case government (most reliable)
- * 2. Noun after preposition (governed case)
- * 3. Pronoun + verb pattern
+ * 1. Subject + verb + accusative object (nominative subject tips verb/prep ambiguity)
+ * 2. Preposition + case government (most reliable for non-SVO patterns)
+ * 3. Noun after preposition (governed case)
+ * 4. Pronoun + verb pattern
  *
  * @param candidates - All possible readings of the current word
  * @param prevWord - Previous word (raw form)
@@ -277,17 +430,22 @@ export function applyGrammarRules(
   candidates: LemmaWithMorph[],
   prevWord: string | null,
   nextWordMorph: LemmaWithMorph[],
-  lemmatizer: GrammarLemmatizerLike | null = null
+  lemmatizer: GrammarLemmatizerLike | null = null,
+  nextWord: string | null = null
 ): GrammarRuleMatch | null {
-  // Rule 1: Preposition + governed case
+  // Rule 1: Subject (nominative) + verb + accusative object
+  const svoRule = applySubjectVerbRule(candidates, prevWord, nextWordMorph, lemmatizer, nextWord);
+  if (svoRule) return svoRule;
+
+  // Rule 2: Preposition + governed case
   const prepRule = applyPrepositionRule(candidates, nextWordMorph);
   if (prepRule) return prepRule;
 
-  // Rule 2: Noun after preposition with governed case
+  // Rule 3: Noun after preposition with governed case
   const nounAfterPrepRule = applyNounAfterPrepositionRule(candidates, prevWord, lemmatizer);
   if (nounAfterPrepRule) return nounAfterPrepRule;
 
-  // Rule 3: Pronoun + verb
+  // Rule 4: Pronoun + verb
   const verbRule = applyPronounVerbRule(candidates, prevWord);
   if (verbRule) return verbRule;
 

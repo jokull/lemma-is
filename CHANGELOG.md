@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2026-03-19
+
+### Added
+
+- **Subject-verb-object disambiguation rule**: Resolves verb/preposition ambiguity for "á" when preceded by a nominative noun or proper name. Previously only pronoun subjects (ég, hann, hún) triggered the verb "eiga" reading; now noun subjects work too: "Barnið á leikfangið" → eiga, "Jón á þrjá hesta" → eiga, "Konráð á buxurnar" → eiga.
+- **`inferCaseFromSuffix()`**: Infers grammatical case from Icelandic definite article suffixes (-inn, -inu, -innar, etc.), enabling case-aware disambiguation even with the compact core binary that lacks morph case data.
+- **`applySubjectVerbRule()`**: New grammar rule export for direct use.
+- Test suite: `tests/subject-verb-disambiguation.test.ts` (17 tests).
+
+### Changed
+
+- Grammar rule pipeline now runs SVO rule before preposition+case rule.
+- Adjectives and numerals recognized as noun phrase heads in SVO rule, handling "Pabbi á stóran bát" and "Jón á þrjá hesta".
+- `applyGrammarRules()` accepts optional `nextWord` raw string for suffix-based case inference fallback.
+- `GrammarLemmatizerLike` interface extended with optional `lemmatizeWithMorph`.
+
 ## [0.10.0] - 2026-02-02
 
 ### Added

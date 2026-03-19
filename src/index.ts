@@ -37,6 +37,8 @@ export {
   applyPrepositionRule,
   applyPronounVerbRule,
   applyNounAfterPrepositionRule,
+  applySubjectVerbRule,
+  inferCaseFromSuffix,
   canGovernCase,
   isKnownPreposition,
   getGovernedCases,
