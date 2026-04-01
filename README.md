@@ -238,6 +238,8 @@ const sql = `SELECT * FROM documents WHERE search_vector @@ to_tsquery('simple',
 await db.query(sql, [query]);
 ```
 
+For BM25 ranking via [pg_textsearch](https://github.com/timescale/pg_textsearch), see [`examples/pg-textsearch-bm25`](examples/pg-textsearch-bm25) — a Docker-based comparison of `ts_rank` vs BM25 with and without lemmatization.
+
 ## Highlighting Search Results
 
 After finding matching documents, highlight the query terms in the original text:
