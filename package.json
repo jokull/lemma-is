@@ -25,6 +25,7 @@
   "files": [
     "dist",
     "data-dist/lemma-is.core.bin",
+    "BINARY_DATA_MANIFEST.json",
     "README.md"
   ],
   "scripts": {

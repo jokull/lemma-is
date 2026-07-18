@@ -1,0 +1,48 @@
+{
+  "languageDataGeneration": "bin-sigrun-2026-07-10-9c10d70d",
+  "builtAt": "2026-07-18",
+  "source": {
+    "name": "BÍN/DIM Sigrúnarsnið (SHsnid.csv)",
+    "url": "https://bin.arnastofnun.is/django/api/nidurhal/?file=SHsnid.csv.zip",
+    "fetchedAt": "2026-07-18",
+    "archiveTimestamp": "2026-07-10T23:15:46Z",
+    "sha256": "9c10d70d73c03168f05f152616b8cafa6e4275e7db8701338f5f3c48a45b7ab6",
+    "records": 7425931,
+    "maxBinId": 569933,
+    "license": "CC BY-SA 4.0"
+  },
+  "builder": {
+    "commit": "f6804d04808f66f870e719b419fa7f4d6c8e11d3",
+    "fullCommand": "python3 scripts/build-binary.py",
+    "coreCommand": "python3 scripts/build-binary.py --no-bigrams --no-morph --top-words 350000 --output data-dist/lemma-is.core.bin",
+    "sidecarCommand": "python3 scripts/build-data.py"
+  },
+  "artifacts": {
+    "data-dist/lemma-is.bin": {
+      "formatVersion": 2,
+      "bytes": 115189168,
+      "sha256": "17deacea8babc890ae79a5dfb51e96cf53e7150da24f13820177729c81d98740",
+      "forms": 3698020,
+      "lemmas": 347926,
+      "analyses": 5811045,
+      "bigrams": 414007
+    },
+    "data-dist/lemma-is.core.bin": {
+      "formatVersion": 1,
+      "bytes": 10049264,
+      "sha256": "32464d06df80fdf4112cc860289012ac67dab9fb5d2a7d737ca161cfe87f0bd4",
+      "forms": 350000,
+      "lemmas": 99680
+    },
+    "data-dist/lemmas.txt.gz": {
+      "bytes": 1430513,
+      "sha256": "55600fd09fa30ecc2fdfeae775ea3fa2eace2e1764b50e630ba2400251a3744d",
+      "lemmas": 347926
+    },
+    "data-dist/lookup.tsv.gz": {
+      "bytes": 11070674,
+      "sha256": "124e5849398212a8fbac9e49222b959519bc13c01bbf36adff1978a1535a16ca",
+      "entries": 3372391
+    }
+  }
+}

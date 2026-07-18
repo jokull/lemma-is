@@ -58,7 +58,7 @@ IFD benchmark summary (lemma recall + overindexing measured against gold lemmas 
 | **Recall (IFD)** | 95.996% | 98.585% | 81.4% (parsed-only) |
 | **Avg candidates** | 1.57 | 1.57 | 1.0 |
 | **Overindexing (extraRate)** | 0.388 | 0.373 | 0.186 |
-| **Memory (load)** | ~18.5 MB | ~182 MB | ~417 MB RSS |
+| **Memory (load)** | ~19.2 MB | ~219.8 MB | ~417 MB RSS |
 | **Parse failures** | n/a | n/a | 27% (sample) |
 | **Disambiguation** | Bigrams + grammar rules | Bigrams + grammar rules | Full grammar + BÍN |
 | **Use case** | Search indexing | Search indexing | NLP analysis |
@@ -69,8 +69,8 @@ GreynirEngine numbers are from full sentence parsing on a 1,000-sentence IFD sam
 
 ### Optimization summary (0.5.0)
 
-- **Core memory**: ~18.5 MB load (heap + ArrayBuffers) for `lemma-is.core.bin`
-- **Full memory**: ~182 MB load for `lemma-is.bin`
+- **Core memory**: ~19.2 MB load (heap + ArrayBuffers) for `lemma-is.core.bin`
+- **Full memory**: ~219.8 MB load for `lemma-is.bin`
 - **Greynir full parser memory**: ~417 MB RSS (sample run)
 - **Core speed**: ~19.0M words/min; **Full speed**: ~14.7M words/min
 - **Core recall**: 95.996% on IFD; **Full recall**: 98.585%
@@ -312,11 +312,11 @@ This is an early effort with known limitations.
 There are two binaries:
 
 - **Core (~9-11 MB)**: default, optimized for browser/edge/cold start
-- **Full (91 MB)**: maximum coverage and disambiguation
+- **Full (~110 MB)**: maximum coverage and disambiguation
 
 The full binary targets Node.js servers where data loads once at startup. Not recommended for:
 
-- **Serverless/edge** — cold start loading 91 MB may be slow
+- **Serverless/edge** — cold start loading ~110 MB may be slow
 - **Browser** — download size prohibitive
 - **Cloudflare Workers** — fits 128 MB limit but cold starts are slow
 
@@ -368,10 +368,13 @@ You can go word → lemma but not lemma → words. If you need to show all infle
 ## Data
 
 Single binary file containing:
-- 289K lemmas from BÍN
-- 3M word form mappings
+- 348K lemmas from BÍN
+- 3.70M word form mappings
 - 414K bigram frequencies
 - Morphological features per word form
+
+The exact BÍN snapshot, build commands, counts, sizes, and output hashes are
+recorded in [`BINARY_DATA_MANIFEST.json`](./BINARY_DATA_MANIFEST.json).
 
 ### Building Data
 
