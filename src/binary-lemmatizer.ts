@@ -28,6 +28,62 @@ import type {
 
 const MAGIC = 0x4c454d41; // "LEMA"
 
+// A token is a "word" for lemmatization purposes if it contains at least one
+// Icelandic letter. Pure whitespace/punctuation is never a lemma.
+const HAS_LETTER = /[a-záéíóúýþæöð]/i;
+const HAS_DIGIT = /[0-9]/;
+
+/**
+ * Common Icelandic inflectional endings, longest first, used to recover the
+ * stem of an unknown inflected form (e.g. "skógs" → "skóg" → skógur,
+ * "kýrnanna" → "kýr" → kýr, "óxum" → "óx" → vaxa). Only real dictionary
+ * lemmas are ever returned from a stripped form.
+ */
+const UNKNOWN_FORM_SUFFIXES = [
+  // definite + case (longest first)
+  "arinnar", // fem gen sg def
+  "arins", // masc gen sg def
+  "innar", // fem gen sg def
+  "inum", // masc/neut dat sg def
+  "unum", // dat pl def
+  "nanna", // gen pl def (kýrnanna → kýr, mannanna → maður)
+  "anna", // gen pl def
+  "nna", // gen pl def (kúnna → kýr)
+  "inni", // fem dat sg def
+  "unni", // fem dat sg def (pizzunni → pizzu)
+  "nni", // dat sg def (konunni → konu)
+  "inu", // neut dat sg def
+  "sins", // masc gen sg def (vinsins → vin)
+  "ins", // masc/neut gen sg def
+  "una", // fem acc sg def
+  "ið", // neut nom/acc sg def
+  "inn", // masc nom sg def (brandinn → brand)
+  "in", // fem nom sg def
+  // case / number endings
+  "um", // dat pl / verb past 1pl (óxum → óx)
+  "ir", // masc nom pl (brandir → brand)
+  "nar", // nom/acc pl def (lýsnar → lýs)
+  "ar", // fem nom pl / masc gen sg
+  "ur", // masc nom sg
+  "ra", // gen pl (adj) (hvorugra → hvorug)
+  "ri", // dat sg (adj) (fyrstri → fyrst)
+  "ði", // weak verb past
+  "ðum", // verb past 1pl
+  "ðu", // verb past 3pl
+  "u", // dat sg / verb past 3pl (óxu → óx)
+  "i", // dat sg
+  "a", // gen pl / fem acc sg
+  "s", // gen sg (skógs → skóg)
+  "ð",
+  "n",
+  "t",
+];
+
+/** Unknown forms shorter than this are never stem-stripped. */
+const MIN_FALLBACK_WORD_LENGTH = 3;
+/** Stripped stems shorter than this are rejected. */
+const MIN_FALLBACK_STEM_LENGTH = 2;
+
 // POS code to string mapping (must match build-binary.py)
 const CODE_TO_POS: WordClass[] = [
   "no",
@@ -260,10 +316,21 @@ export class BinaryLemmatizer implements LemmatizerLike, BigramProvider {
    */
   lemmatize(word: string, options: BinaryLemmatizeOptions = {}): string[] {
     const normalized = word.toLowerCase();
+
+    // Non-word tokens (whitespace, punctuation) are never lemmas.
+    // Digit-containing tokens pass through (numbers/dates are filtered
+    // upstream by the caller's includeNumbers handling).
+    if (!HAS_LETTER.test(normalized)) {
+      return HAS_DIGIT.test(normalized) ? [normalized] : [];
+    }
+
     const idx = this.findWord(normalized);
 
     if (idx === -1) {
-      return [normalized];
+      // Unknown inflected form: try stripping common inflectional endings
+      // to recover the stem's lemmas (skógs → skógur, kýrnanna → kýr,
+      // óxum → vaxa). Never returns the stripped string itself as a lemma.
+      return this.stemFallback(normalized);
     }
 
     const start = this.entryOffsets[idx];
@@ -293,6 +360,48 @@ export class BinaryLemmatizer implements LemmatizerLike, BigramProvider {
     }
 
     return result;
+  }
+
+  /**
+   * Recover lemmas for an unknown inflected form by stripping inflectional
+   * endings (see UNKNOWN_FORM_SUFFIXES). Only lemmas of real dictionary
+   * forms are returned; the stripped string itself is never a candidate.
+   */
+  private stemFallback(word: string): string[] {
+    if (word.length < MIN_FALLBACK_WORD_LENGTH) {
+      return [word];
+    }
+    for (const suffix of UNKNOWN_FORM_SUFFIXES) {
+      if (!word.endsWith(suffix)) {
+        continue;
+      }
+      const stem = word.slice(0, word.length - suffix.length);
+      if (stem.length < MIN_FALLBACK_STEM_LENGTH) {
+        continue;
+      }
+      const stemIdx = this.findWord(stem);
+      if (stemIdx === -1) {
+        continue;
+      }
+      const stemStart = this.entryOffsets[stemIdx];
+      const stemEnd = this.entryOffsets[stemIdx + 1];
+      const seen = new Set<string>();
+      const lemmas: string[] = [];
+      for (let j = stemStart; j < stemEnd; j++) {
+        const { lemmaIdx } = this.unpackEntry(this.entries[j]);
+        const lemma = this.getLemma(lemmaIdx);
+        if (!seen.has(lemma)) {
+          seen.add(lemma);
+          lemmas.push(lemma);
+        }
+      }
+      // Skip empty results and self-identity (word is its own lemma).
+      if (lemmas.length === 0 || (lemmas.length === 1 && lemmas[0] === word)) {
+        continue;
+      }
+      return lemmas;
+    }
+    return [word];
   }
 
   /**

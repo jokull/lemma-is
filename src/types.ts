@@ -126,6 +126,8 @@ export interface LemmaWithMorph extends LemmaWithPOS {
 export interface LemmatizerLike {
   lemmatize(word: string): string[];
   lemmatizeWithPOS?(word: string): LemmaWithPOS[];
+  /** True if the word form is in the dictionary (no unknown-form fallback). */
+  isKnown?(word: string): boolean;
 }
 
 /**

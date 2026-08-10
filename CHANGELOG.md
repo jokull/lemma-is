@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0] - 2026-08-10
+
+### Added
+
+- **Unknown-form inflectional fallback in `lemmatize()`**: missing word forms now strip common Icelandic endings and re-look-up the stem, returning only real dictionary lemmas — `skógs` → `skógur`, `kýrnanna` → `kýr`, `vinsins` → `vinur`, `óxum`/`óxu` → `vaxa`, and core-model gaps like `brandinn` → `brandur`. Closes #6 and the core gaps in #10.
+- **Full model ships in the npm package** (`data-dist/lemma-is.bin` plus the `lookup.tsv.gz`/`lemmas.txt.gz` sidecar). The full binary resolves every form the core leaves unchanged. Closes #10.
+- **`isKnown` on `LemmatizerLike`**; `CompoundSplitter` now requires compound parts to be raw dictionary word forms, so suffix-stripped pseudo-words (e.g. `slán` in `húsnæðislán`) can't hijack a split.
+
+### Changed
+
+- **`lemmatize()` returns `[]` for non-word tokens** (whitespace, punctuation); digit tokens still pass through. Closes #5.
+- **Tokenizer hygiene in `extractIndexableLemmas`/`buildSearchQuery`**: standalone `%` never indexed; hyphenated/colon numerics (dates, times), URLs, emails, domains and other non-word tokens behave like plain numbers — dropped by default, indexable with `includeNumbers: true`; hyphen-joined repeated inflected forms decompose like their space-separated equivalent (`börnin-börnin` → `barn`). Closes #9.
+- **Stopword filtering is robust to lemmatization**: `ekki` and `var` added to `STOPWORDS_IS`; in simple mode the surface token's own stopword status now drops lemmatization escapes (`er`→`vera`, `sem`→`semja`, `á`→`eiga`, `hún`→`húnn`). A stopwords-only sentence indexes nothing. Closes #8.
+- **Data rebuild drops proper-noun-only lemma readings** that collide with common word forms (`Skólinn` the school name no longer makes `skólinn` its own lemma; `skólann`/`skólanum`/`skólans` → `skóli`). Lemmas with a real common source (`á` the river, `hestur`) are preserved. Closes #3.
+
 ## [0.11.0] - 2026-03-19
 
 ### Added

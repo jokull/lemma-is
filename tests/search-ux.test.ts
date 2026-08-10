@@ -164,7 +164,18 @@ describe("Search UX: Real-world Icelandic search expectations", () => {
   // 16. Verb 'vera' (to be): All forms match
   // ==========================================================================
   it("16. search 'vera' finds doc with 'voru' (they were)", () => {
-    expect(searchMatches("vera", "Þeir voru ekki heima")).toBe(true);
+    // "voru" is a surface stopword (past of vera), so simple mode drops it
+    // (issue #8: stopword forms must not leak lemmas). Contextual mode keeps
+    // the vera reading since "vera" itself is not a stopword.
+    const queryResult = buildSearchQuery("vera", lemmatizer, {
+      removeStopwords: true,
+      useContextualStopwords: true,
+    });
+    const docLemmas = extractIndexableLemmas("Þeir voru ekki heima", lemmatizer, {
+      removeStopwords: true,
+      useContextualStopwords: true,
+    });
+    expect(queryResult.groups.flat().some((l) => docLemmas.has(l))).toBe(true);
   });
 
   // ==========================================================================
@@ -241,7 +252,18 @@ describe("Search UX: Edge cases and tricky scenarios", () => {
   // 22. Ambiguous word 'á': should find documents using it as verb
   // ==========================================================================
   it("22. search 'eiga' (to own) finds doc with 'á' (owns)", () => {
-    expect(searchMatches("eiga", "Ég á bíl")).toBe(true);
+    // Simple-mode stopword filtering drops surface-form "á" entirely (it is a
+    // stopword as a preposition), so the verb reading must be preserved via
+    // contextual stopwords, which keep "eiga" (so) and drop only "á" (fs/ao).
+    const queryResult = buildSearchQuery("eiga", lemmatizer, {
+      removeStopwords: true,
+      useContextualStopwords: true,
+    });
+    const docLemmas = extractIndexableLemmas("Ég á bíl", lemmatizer, {
+      removeStopwords: true,
+      useContextualStopwords: true,
+    });
+    expect(queryResult.groups.flat().some((l) => docLemmas.has(l))).toBe(true);
   });
 
   // ==========================================================================

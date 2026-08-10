@@ -25,6 +25,9 @@
   "files": [
     "dist",
     "data-dist/lemma-is.core.bin",
+    "data-dist/lemma-is.bin",
+    "data-dist/lookup.tsv.gz",
+    "data-dist/lemmas.txt.gz",
     "BINARY_DATA_MANIFEST.json",
     "README.md"
   ],

@@ -392,6 +392,17 @@ export class CompoundSplitter {
     leftPart: string,
     rightPart: string
   ): { leftParts: string[]; rightParts: string[]; score: number } | null {
+    // A compound part must be a real dictionary word form. Reject parts that
+    // only resolve via the unknown-form suffix fallback — e.g. "slán" in
+    // "húsnæðislán" must not pass as "slá" (strike) through suffix stripping,
+    // or the correct "lán" split would lose to a nonsense one.
+    if (
+      !this.lemmatizer.isKnown?.(leftPart) ||
+      !this.lemmatizer.isKnown?.(rightPart)
+    ) {
+      return null;
+    }
+
     // Get lemmas for both parts
     const leftLemmas = this.lemmatizer.lemmatize(leftPart);
     const rightLemmas = this.lemmatizer.lemmatize(rightPart);

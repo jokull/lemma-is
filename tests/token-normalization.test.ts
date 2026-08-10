@@ -140,26 +140,26 @@ describe("Token normalization for indexing", () => {
 
   describe("phone numbers (telno)", () => {
     it("normalizes international phone number with + prefix", () => {
-      const lemmas = extractIndexableLemmas("Ring +354-555-1234", lemmatizer);
+      const lemmas = extractIndexableLemmas("Ring +354-555-1234", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("+3545551234")).toBe(true);
     });
 
     it("normalizes 7-digit Icelandic number", () => {
-      const lemmas = extractIndexableLemmas("Sími 5551234", lemmatizer);
+      const lemmas = extractIndexableLemmas("Sími 5551234", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("5551234")).toBe(true);
     });
   });
 
   describe("email", () => {
     it("lowercases email", () => {
-      const lemmas = extractIndexableLemmas("Email: Foo@Bar.IS", lemmatizer);
+      const lemmas = extractIndexableLemmas("Email: Foo@Bar.IS", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("foo@bar.is")).toBe(true);
     });
 
     it("handles email in sentence", () => {
       const lemmas = extractIndexableLemmas(
         "Sendu tölvupóst á info@example.is",
-        lemmatizer
+        lemmatizer, { includeNumbers: true }
       );
       expect(lemmas.has("info@example.is")).toBe(true);
     });
@@ -169,37 +169,37 @@ describe("Token normalization for indexing", () => {
     it("indexes URL as-is", () => {
       const lemmas = extractIndexableLemmas(
         "See https://example.is/path",
-        lemmatizer
+        lemmatizer, { includeNumbers: true }
       );
       expect(lemmas.has("https://example.is/path")).toBe(true);
     });
 
     it("lowercases domain", () => {
-      const lemmas = extractIndexableLemmas("Visit Example.IS", lemmatizer);
+      const lemmas = extractIndexableLemmas("Visit Example.IS", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("example.is")).toBe(true);
     });
   });
 
   describe("dates", () => {
     it("normalizes European date format to ISO", () => {
-      const lemmas = extractIndexableLemmas("Fundur 15.3.2024", lemmatizer);
+      const lemmas = extractIndexableLemmas("Fundur 15.3.2024", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("2024-03-15")).toBe(true);
     });
 
     it("normalizes ISO date", () => {
-      const lemmas = extractIndexableLemmas("Dagsetning 2024-06-17", lemmatizer);
+      const lemmas = extractIndexableLemmas("Dagsetning 2024-06-17", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("2024-06-17")).toBe(true);
     });
   });
 
   describe("time", () => {
     it("normalizes time to HH:MM", () => {
-      const lemmas = extractIndexableLemmas("Klukkan 14:30", lemmatizer);
+      const lemmas = extractIndexableLemmas("Klukkan 14:30", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("14:30")).toBe(true);
     });
 
     it("includes seconds when present", () => {
-      const lemmas = extractIndexableLemmas("Tími 09:15:30", lemmatizer);
+      const lemmas = extractIndexableLemmas("Tími 09:15:30", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("09:15:30")).toBe(true);
     });
   });
@@ -208,7 +208,7 @@ describe("Token normalization for indexing", () => {
     it("normalizes full timestamp to ISO", () => {
       const lemmas = extractIndexableLemmas(
         "Log 2024-06-17T14:30:00",
-        lemmatizer
+        lemmatizer, { includeNumbers: true }
       );
       expect(lemmas.has("2024-06-17T14:30:00")).toBe(true);
     });
@@ -216,36 +216,36 @@ describe("Token normalization for indexing", () => {
 
   describe("SSN (kennitala)", () => {
     it("normalizes with dash format", () => {
-      const lemmas = extractIndexableLemmas("Kt. 010130-2989", lemmatizer);
+      const lemmas = extractIndexableLemmas("Kt. 010130-2989", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("010130-2989")).toBe(true);
     });
 
     it("adds dash when input has none", () => {
-      const lemmas = extractIndexableLemmas("Kennitala 0101302989", lemmatizer);
+      const lemmas = extractIndexableLemmas("Kennitala 0101302989", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("010130-2989")).toBe(true);
     });
   });
 
   describe("amounts", () => {
     it("handles USD as combined token", () => {
-      const lemmas = extractIndexableLemmas("Cost $100", lemmatizer);
+      const lemmas = extractIndexableLemmas("Cost $100", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("100 USD")).toBe(true);
     });
 
     it("handles EUR as combined token", () => {
-      const lemmas = extractIndexableLemmas("Price €50", lemmatizer);
+      const lemmas = extractIndexableLemmas("Price €50", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("50 EUR")).toBe(true);
     });
 
     it("indexes ISK amount as combined token", () => {
-      const lemmas = extractIndexableLemmas("Verð 5000 kr", lemmatizer);
+      const lemmas = extractIndexableLemmas("Verð 5000 kr", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("5000 ISK")).toBe(true);
     });
 
     it("search query matches indexed amount", () => {
       // Both index and search produce same normalized form
-      const indexed = extractIndexableLemmas("Kostar $100", lemmatizer);
-      const { groups } = buildSearchQuery("$100", lemmatizer);
+      const indexed = extractIndexableLemmas("Kostar $100", lemmatizer, { includeNumbers: true });
+      const { groups } = buildSearchQuery("$100", lemmatizer, { includeNumbers: true });
       const searchTerms = groups.flat();
       // Search term should match what was indexed
       expect(searchTerms.some((term) => indexed.has(term))).toBe(true);
@@ -254,19 +254,19 @@ describe("Token normalization for indexing", () => {
 
   describe("measurements", () => {
     it("indexes as combined token", () => {
-      const lemmas = extractIndexableLemmas("Lengd 15km", lemmatizer);
+      const lemmas = extractIndexableLemmas("Lengd 15km", lemmatizer, { includeNumbers: true });
       // tokenize-is normalizes km to m, combined as single token
       expect(lemmas.has("15 m")).toBe(true);
     });
 
     it("handles weight measurement as combined token", () => {
-      const lemmas = extractIndexableLemmas("Þyngd 2,5kg", lemmatizer);
+      const lemmas = extractIndexableLemmas("Þyngd 2,5kg", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("2.5 kg") || lemmas.has("2.5 g")).toBe(true);
     });
 
     it("search query matches indexed measurement", () => {
-      const indexed = extractIndexableLemmas("Lengd 15km", lemmatizer);
-      const { groups } = buildSearchQuery("15km", lemmatizer);
+      const indexed = extractIndexableLemmas("Lengd 15km", lemmatizer, { includeNumbers: true });
+      const { groups } = buildSearchQuery("15km", lemmatizer, { includeNumbers: true });
       const searchTerms = groups.flat();
       expect(searchTerms.some((term) => indexed.has(term))).toBe(true);
     });
@@ -274,12 +274,12 @@ describe("Token normalization for indexing", () => {
 
   describe("percent", () => {
     it("indexes percentage with % suffix", () => {
-      const lemmas = extractIndexableLemmas("Afsláttur 25%", lemmatizer);
+      const lemmas = extractIndexableLemmas("Afsláttur 25%", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("25%")).toBe(true);
     });
 
     it("handles decimal percentage", () => {
-      const lemmas = extractIndexableLemmas("Vextir 3,5%", lemmatizer);
+      const lemmas = extractIndexableLemmas("Vextir 3,5%", lemmatizer, { includeNumbers: true });
       expect(lemmas.has("3.5%")).toBe(true);
     });
   });
@@ -309,7 +309,7 @@ describe("Token normalization for indexing", () => {
     it("handles username in sentence", () => {
       const lemmas = extractIndexableLemmas(
         "Sendu skilaboð til @someone",
-        lemmatizer
+        lemmatizer, { includeNumbers: true }
       );
       expect(lemmas.has("@someone")).toBe(true);
     });
@@ -333,27 +333,27 @@ describe("Token normalization for indexing", () => {
 
   describe("buildSearchQuery includes normalized tokens", () => {
     it("can search for phone number", () => {
-      const { query } = buildSearchQuery("+354-555-1234", lemmatizer);
+      const { query } = buildSearchQuery("+354-555-1234", lemmatizer, { includeNumbers: true });
       expect(query).toContain("+3545551234");
     });
 
     it("can search for email", () => {
-      const { query } = buildSearchQuery("foo@bar.is", lemmatizer);
+      const { query } = buildSearchQuery("foo@bar.is", lemmatizer, { includeNumbers: true });
       expect(query).toContain("foo@bar.is");
     });
 
     it("can search for date", () => {
-      const { query } = buildSearchQuery("15.3.2024", lemmatizer);
+      const { query } = buildSearchQuery("15.3.2024", lemmatizer, { includeNumbers: true });
       expect(query).toContain("2024-03-15");
     });
 
     it("can search for hashtag with # prefix", () => {
-      const { query } = buildSearchQuery("#Iceland", lemmatizer);
+      const { query } = buildSearchQuery("#Iceland", lemmatizer, { includeNumbers: true });
       expect(query).toContain("#iceland");
     });
 
     it("can search for URL", () => {
-      const { query } = buildSearchQuery("https://example.is", lemmatizer);
+      const { query } = buildSearchQuery("https://example.is", lemmatizer, { includeNumbers: true });
       expect(query).toContain("https://example.is");
     });
   });
@@ -362,7 +362,7 @@ describe("Token normalization for indexing", () => {
     it("indexes both words and special tokens", () => {
       const lemmas = extractIndexableLemmas(
         "Hringdu í 5551234 eða sendu tölvupóst á info@test.is",
-        lemmatizer
+        lemmatizer, { includeNumbers: true }
       );
 
       // Words should be lemmatized
@@ -378,7 +378,7 @@ describe("Token normalization for indexing", () => {
     it("indexes contact info in business listing", () => {
       const lemmas = extractIndexableLemmas(
         "Veitingastaður - Sími: +354-555-1234, netfang: info@restaurant.is, vefsíða: https://restaurant.is",
-        lemmatizer
+        lemmatizer, { includeNumbers: true }
       );
 
       expect(lemmas.has("veitingastaður")).toBe(true);
@@ -390,7 +390,7 @@ describe("Token normalization for indexing", () => {
     it("indexes event with date and time", () => {
       const lemmas = extractIndexableLemmas(
         "Tónleikar 15.3.2024 kl. 20:00",
-        lemmatizer
+        lemmatizer, { includeNumbers: true }
       );
 
       expect(lemmas.has("tónleikar")).toBe(true);
@@ -401,7 +401,7 @@ describe("Token normalization for indexing", () => {
     it("indexes financial data with percentage", () => {
       const lemmas = extractIndexableLemmas(
         "Hagnaður $500 eða 15%",
-        lemmatizer
+        lemmatizer, { includeNumbers: true }
       );
 
       expect(lemmas.has("hagnaður")).toBe(true);

@@ -314,7 +314,7 @@ There are two binaries:
 - **Core (~9-11 MB)**: default, optimized for browser/edge/cold start
 - **Full (~110 MB)**: maximum coverage and disambiguation
 
-The full binary targets Node.js servers where data loads once at startup. Not recommended for:
+Both ship in the npm package. The full binary targets Node.js servers where data loads once at startup. Not recommended for:
 
 - **Serverless/edge** — cold start loading ~110 MB may be slow
 - **Browser** — download size prohibitive
@@ -322,13 +322,20 @@ The full binary targets Node.js servers where data loads once at startup. Not re
 
 For browser apps, use the **core** binary.
 
-To use the full binary, build it locally:
+```typescript
+import { readFileSync } from "fs";
+import { BinaryLemmatizer } from "lemma-is";
 
-```bash
-pnpm build:binary
+// Full model (max coverage; ~110 MB)
+const buffer = readFileSync("node_modules/lemma-is/data-dist/lemma-is.bin");
+const lemmatizer = BinaryLemmatizer.loadFromBuffer(
+  buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+);
 ```
 
-Then load it from `data-dist/lemma-is.bin`.
+### Unknown Form Fallback
+
+When a word form is missing from the model (below the core model's frequency cutoff, or a BÍN gap like `skógs`), `lemmatize()` strips common inflectional endings and re-looks-up the stem — `skógs` → `skógur`, `kýrnanna` → `kýr`, `óxum` → `vaxa`. Only real dictionary lemmas are returned; the stripped string itself is never a lemma. A word that still resolves to nothing returns itself unchanged (callers can detect this as `result[0] === input`).
 
 ### Compact Builds (Browser/Edge)
 
@@ -356,7 +363,7 @@ Bigram disambiguation only works when the word pair exists in corpus data. Witho
 
 ```typescript
 lemmatizer.lemmatize("á");
-// → ["á", "eiga"] — no way to know which is more likely
+// → ["á", "eiga", "ær"] — preposition "on", verb "owns", noun "ewe" (dative)
 ```
 
 For search indexing, use `indexAllCandidates: true` (the default) to index all lemmas.
@@ -368,7 +375,7 @@ You can go word → lemma but not lemma → words. If you need to show all infle
 ## Data
 
 Single binary file containing:
-- 348K lemmas from BÍN
+- 346K lemmas from BÍN
 - 3.70M word form mappings
 - 414K bigram frequencies
 - Morphological features per word form

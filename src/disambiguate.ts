@@ -338,7 +338,7 @@ export class Disambiguator {
     this.morphCache = this.lemmatizer.lemmatizeWithMorph ? new Map() : null;
   }
 
-  private getMorph(word: string): LemmaWithMorph[] | undefined {
+  getMorph(word: string): LemmaWithMorph[] | undefined {
     if (!this.lemmatizer.lemmatizeWithMorph || !this.morphCache) return undefined;
     const key = word.toLowerCase();
     const cached = this.morphCache.get(key);

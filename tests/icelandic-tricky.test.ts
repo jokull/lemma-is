@@ -449,6 +449,6 @@ describe("Edge cases and gotchas", () => {
 
   it("empty string handling", () => {
     const empty = lemmatizer.lemmatize("");
-    expect(empty).toEqual([""]); // Returns as-is
+    expect(empty).toEqual([]); // Non-word input yields no lemmas
   });
 });

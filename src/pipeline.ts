@@ -8,7 +8,7 @@
 import { tokenize, type Token, type TokenSpan } from "tokenize-is";
 import { Disambiguator, type DisambiguatedToken } from "./disambiguate.js";
 import { CompoundSplitter, type CompoundSplit } from "./compounds.js";
-import { STOPWORDS_IS, isContextualStopword } from "./stopwords.js";
+import { STOPWORDS_IS, isContextualStopword, isStopword } from "./stopwords.js";
 import { normalizeToken } from "./normalizers.js";
 import type { LemmatizerLike, BigramProvider } from "./types.js";
 
@@ -31,6 +31,36 @@ const SKIP_KINDS = new Set([
   "s_end",
   "s_split",
   "unknown",
+]);
+
+// Word tokens must contain at least one Icelandic letter; the tokenizer
+// occasionally classifies stray punctuation (e.g. "%" in "10.5%") as words.
+const HAS_ICELANDIC_LETTER = /[a-záéíóúýþæöð]/i;
+
+/**
+ * Non-word token kinds that behave like numbers for indexing: dropped unless
+ * includeNumbers is set, consistent with plain number tokens. This covers
+ * dates, times, amounts, percentages, phone numbers, and opaque blobs
+ * (URLs/emails/domains) — none of which lemmatize or match Icelandic word
+ * queries. Set includeNumbers to index them (e.g. contact-info search).
+ */
+const NUMBER_LIKE_KINDS = new Set([
+  "date",
+  "dateabs",
+  "daterel",
+  "time",
+  "timestamp",
+  "timestampabs",
+  "timestamprel",
+  "ssn",
+  "amount",
+  "measurement",
+  "percent",
+  "year",
+  "telno",
+  "url",
+  "email",
+  "domain",
 ]);
 
 /**
@@ -221,13 +251,36 @@ export function processText(
 
     const lemmas = lemmatizer.lemmatize(raw);
 
+    // Unknown hyphenated tokens: decompose into parts and lemmatize each.
+    // Repeated parts (e.g. "börnin-börnin") behave like their space-separated
+    // equivalent ("börnin börnin" → barn); distinct parts (e.g. "COVID-sýking")
+    // are kept alongside the raw token for recall.
+    if (isUnknownLemma(raw, lemmas) && raw.includes("-")) {
+      const parts = raw.split("-").filter((p) => p.length > 0);
+      const partLemmas: string[] = [];
+      for (const part of parts) {
+        partLemmas.push(...getLemmas(part));
+      }
+      if (partLemmas.length > 0) {
+        const uniqueParts = [...new Set(partLemmas)];
+        const repeated = parts.every(
+          (p) => p.toLowerCase() === parts[0].toLowerCase()
+        );
+        const combined = repeated
+          ? uniqueParts
+          : [...new Set([...lemmas, ...uniqueParts])];
+        lemmaCache.set(key, combined);
+        return combined;
+      }
+    }
+
     // For unknown words, try suffix stripping to find base forms.
     // Must check BOTH isUnknownLemma (returns self) AND !isKnown (not in dictionary)
     // to avoid stripping suffixes from words like "fyrir" that are their own lemma.
     if (
       stripUnknownSuffixes &&
       isUnknownLemma(raw, lemmas) &&
-      !lemmatizer.isKnown(raw) &&
+      !lemmatizer.isKnown?.(raw) &&
       raw.length >= MIN_UNKNOWN_WORD_LENGTH
     ) {
       const fallbackLemmas = trySuffixFallback(raw);
@@ -266,6 +319,10 @@ export function processText(
     // Handle word tokens
     if (LEMMATIZABLE_KINDS.has(token.kind)) {
       const tokenText = token.text ?? "";
+      // Non-letter "word" tokens (e.g. "%" in "10.5%") are not words.
+      if (!HAS_ICELANDIC_LETTER.test(tokenText)) {
+        continue;
+      }
       const lemmas = getLemmas(tokenText);
 
       const processed: ProcessedToken = {
@@ -280,20 +337,6 @@ export function processText(
       // - Always if alwaysTryCompounds is set (for better search recall)
       // - Otherwise only if lemmatization returns unknown word
       const isUnknownWord = lemmas.length === 1 && lemmas[0] === tokenText.toLowerCase();
-
-      // Split unknown hyphenated words (e.g., "COVID-sýking" → "covid" + "sýking")
-      if (isUnknownWord && tokenText.includes("-")) {
-        const hyphenParts = tokenText.split("-");
-        const partLemmas: string[] = [];
-        for (const part of hyphenParts) {
-          if (part.length > 0) {
-            partLemmas.push(...getLemmas(part));
-          }
-        }
-        if (partLemmas.length > 0) {
-          processed.lemmas = [...new Set([...lemmas, ...partLemmas])];
-        }
-      }
 
       if (compoundSplitter && (alwaysTryCompounds || isUnknownWord)) {
         const split = compoundSplitter.split(tokenText);
@@ -316,6 +359,11 @@ export function processText(
     if (normalized.length > 0) {
       // Numbers/ordinals only included if includeNumbers is set
       if ((token.kind === "number" || token.kind === "ordinal") && !includeNumbers) {
+        continue;
+      }
+      // Number-like tokens (dates, times, amounts, percentages, URLs,
+      // emails, ...) are dropped by default, consistent with plain numbers.
+      if (!includeNumbers && NUMBER_LIKE_KINDS.has(token.kind)) {
         continue;
       }
       results.push({
@@ -411,6 +459,14 @@ export function extractIndexableLemmas(
   for (const token of processed) {
     // Skip entities
     if (token.isEntity) {
+      continue;
+    }
+
+    // A token whose surface form is a stopword is never indexable — catches
+    // lemmatization escapes (er → vera, sem → semja, á → eiga, hún → húnn,
+    // var → vera). Contextual mode needs the lemma for POS-based filtering,
+    // so it keeps its own path.
+    if (removeStopwords && !useContextualStopwords && isStopword(token.original)) {
       continue;
     }
 
@@ -523,6 +579,12 @@ export function buildSearchQuery(
   for (const token of processed) {
     // Mirror indexing behavior: skip entities
     if (token.isEntity) continue;
+
+    // Mirror indexing: surface-form stopwords are dropped entirely
+    // (catches lemmatization escapes like er → vera, á → eiga).
+    if (removeStopwords && !useContextualStopwords && isStopword(token.original)) {
+      continue;
+    }
 
     let candidates: string[] = [];
     if (indexAllCandidates) {

@@ -26,7 +26,7 @@ exports[`Processing Pipeline > Benchmark Metrics > LITERARY paragraph > LITERARY
   "compoundsFound": 3,
   "coverage": 0.76,
   "entitiesSkipped": 0,
-  "uniqueLemmas": 37,
+  "uniqueLemmas": 35,
 }
 `;
 
@@ -36,7 +36,7 @@ exports[`Processing Pipeline > Benchmark Metrics > NEWS paragraph > NEWS metrics
   "compoundsFound": 9,
   "coverage": 0.75,
   "entitiesSkipped": 0,
-  "uniqueLemmas": 63,
+  "uniqueLemmas": 60,
 }
 `;
 
