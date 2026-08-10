@@ -116,6 +116,97 @@ const lemmas = extractIndexableLemmas("Börnin fóru í bíó", lemmatizer);
 // → ["barn", "fara", "fóra", "í", "bíó"]
 ```
 
+## Defaults, Output, and Tuning
+
+lemma-is has sensible defaults for search indexing — but the defaults are a *tradeoff*, and it pays to know what they produce before you ship. The short version:
+
+- **What you get:** every candidate lemma of every word (recall first — an ambiguous word indexes all its readings), compounds split into their parts, stopwords dropped, number-like tokens skipped. A document with "Ég á bíl" indexes `eiga` and `bíl`; a search for "eiga" finds it.
+- **What it costs:** memory (pick your binary) and some overindexing (ambiguous words add readings that aren't the intended sense).
+- **If you want to tweak:** the pipeline flags, compound splitter mode, and curated lists below.
+
+### What the defaults produce
+
+`extractIndexableLemmas(text, lemmatizer, { removeStopwords: true })` gives you:
+
+- **All candidate lemmas of ambiguous words.** `"á"` indexes `["á", "eiga", "ær"]` (preposition "on", verb "owns", ewe dative). This is deliberate — you'd rather show an extra result than miss a relevant document. See `indexAllCandidates` if you want precision instead.
+- **Compound splits.** `húsnæðislán` indexes `húsnæði` + `lán` too, so a search for "lán" finds mortgage documents.
+- **No function words** (`í`, `er`, `með`, ...) — see `useContextualStopwords` for a smarter variant.
+- **No numbers/URLs/emails/dates** — skipped unless you set `includeNumbers: true`.
+- **Unknown word forms** fall back to real dictionary lemmas (never the stripped string itself) — a word that still resolves to nothing is returned unchanged.
+
+### Memory: pick your binary
+
+Two binaries ship in `data-dist/`; the only difference is coverage and memory:
+
+| Binary | Size | Use for |
+|---|---|---|
+| `lemma-is.bin` | ~110 MB | Node/Bun/Deno servers, max coverage (98.6% IFD recall) |
+| `lemma-is.core.bin` | ~9-11 MB | Browser, edge, serverless — lower memory, ~96% recall |
+
+The full binary is the default recommendation for servers where the model loads once at startup; core is for runtimes where cold start and download size matter.
+
+```typescript
+import { readFileSync } from "fs";
+import { BinaryLemmatizer } from "lemma-is";
+
+const buffer = readFileSync("node_modules/lemma-is/data-dist/lemma-is.bin");
+// .slice() hands loadFromBuffer a view of the file's underlying ArrayBuffer
+// instead of copying the whole 110 MB
+const lemmatizer = BinaryLemmatizer.loadFromBuffer(
+  buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+);
+```
+
+### Tuning the pipeline
+
+All pipeline handles accept `removeStopwords`, and:
+
+- `useContextualStopwords: true` — drop stopwords only in their function-word sense. `"Ég á bíl"` keeps `eiga` (verb), `"Bókin er á borðinu"` still drops `á` (preposition). Off by default (simple surface-form stopword list).
+- `indexAllCandidates: false` — index only the disambiguated best guess instead of every candidate lemma. Tighter index, misses ambiguous readings.
+- `includeNumbers: true` — index dates, times, URLs, emails, percents, phone numbers (normalized) instead of skipping them.
+- `includeOriginal` — also index the raw surface form alongside its lemmas.
+- `bigrams` / `compoundSplitter` — pass the lemmatizer (it implements `BigramProvider`) and/or a `CompoundSplitter` to enable disambiguation and compound splitting.
+
+### Tuning compound splitting
+
+`CompoundSplitter` takes a `KnownLemmaLookup` (see `createKnownLemmaSet` / `createKnownLemmaFilter`) and options:
+
+```typescript
+const splitter = new CompoundSplitter(lemmatizer, knownLemmas, {
+  mode: "balanced",      // "aggressive" | "balanced" | "conservative"
+  minPartLength: 3,      // shorter parts (e.g. "ís" in "ísland") allowed below 3
+  tryLinkingLetters: true, // try removing linking s/u/a at the junction
+});
+```
+
+The splitter's curated lists are exported and extensible — add your own never-split words or derivational suffixes:
+
+```typescript
+import { PROTECTED_LEMMAS, DERIVATIONAL_SUFFIX_LEMMAS } from "lemma-is";
+PROTECTED_LEMMAS.add("mittfirnarnafn");        // stop splitting a word
+DERIVATIONAL_SUFFIX_LEMMAS.add("lingur");      // never split before these
+```
+
+(`PROTECTED_LEMMAS` and `DERIVATIONAL_SUFFIX_LEMMAS` are shared module state — mutating them affects every splitter in the process.)
+
+### Handle reference
+
+Everything above, in one place:
+
+| Handle | Returns |
+|---|---|
+| `lemmatizer.lemmatize(word, opts?)` | `string[]` — all candidate lemmas (with unknown-form fallback) |
+| `lemmatizer.lemmatizeWithPOS(word)` | `{ lemma, pos }[]` — candidates with word class |
+| `lemmatizer.lemmatizeWithMorph(word)` | `{ lemma, pos, morph }[]` — plus case/gender/number |
+| `lemmatizer.isKnown(word)` | `boolean` — word form is in the dictionary (no fallback applied) |
+| `lemmatizer.getAllLemmas()` | `string[]` — every lemma, for building `CompoundSplitter` lookups |
+| `processText(text, lemmatizer, opts)` | `ProcessedToken[]` — per-token lemmas, disambiguated guess, confidence, compound splits |
+| `extractIndexableLemmas(text, lemmatizer, opts)` | `Set<string>` — unique indexable lemmas (stopwords/compounds applied) |
+| `extractDisambiguatedLemmas(text, lemmatizer, bigrams, opts)` | `Set<string>` — one best-guess lemma per token, bigram-disambiguated |
+| `buildSearchQuery(text, lemmatizer, opts)` | `{ groups, query }` — for backend query construction |
+| `highlight(query, text, lemmatizer, opts?)` | `HighlightResult` — segments with match spans |
+| `extractSnippets(query, text, lemmatizer, opts?)` | `SnippetResult` — ranked, non-overlapping snippets |
+
 ## Features
 
 ### Morphological Features
@@ -135,6 +226,8 @@ Shallow grammar rules use Icelandic case government to disambiguate prepositions
 ```typescript
 import { Disambiguator } from "lemma-is";
 
+// BinaryLemmatizer implements BigramProvider, so the same instance
+// supplies both the lemmatizer and the bigram frequencies
 const disambiguator = new Disambiguator(lemmatizer, lemmatizer, { useGrammarRules: true });
 
 // "á borðinu" - borðinu is dative, á governs dative → preposition
