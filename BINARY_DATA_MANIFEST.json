@@ -1,6 +1,6 @@
 {
   "languageDataGeneration": "bin-sigrun-2026-07-10-9c10d70d",
-  "builtAt": "2026-07-18",
+  "builtAt": "2026-08-10",
   "source": {
     "name": "BÍN/DIM Sigrúnarsnið (SHsnid.csv)",
     "url": "https://bin.arnastofnun.is/django/api/nidurhal/?file=SHsnid.csv.zip",
@@ -12,37 +12,38 @@
     "license": "CC BY-SA 4.0"
   },
   "builder": {
-    "commit": "f6804d04808f66f870e719b419fa7f4d6c8e11d3",
+    "commit": "e93eeb3",
     "fullCommand": "python3 scripts/build-binary.py",
     "coreCommand": "python3 scripts/build-binary.py --no-bigrams --no-morph --top-words 350000 --output data-dist/lemma-is.core.bin",
-    "sidecarCommand": "python3 scripts/build-data.py"
+    "sidecarCommand": "python3 scripts/build-data.py",
+    "notes": "build scripts now drop proper-noun-only lemma readings that collide with common word forms (Skólinn vs skóli)"
   },
   "artifacts": {
     "data-dist/lemma-is.bin": {
       "formatVersion": 2,
-      "bytes": 115189168,
-      "sha256": "17deacea8babc890ae79a5dfb51e96cf53e7150da24f13820177729c81d98740",
+      "bytes": 115150148,
+      "sha256": "260a3be731479ced8a5a31ec088087c72e808de72878d3ae01726ad680ea8fb2",
       "forms": 3698020,
-      "lemmas": 347926,
-      "analyses": 5811045,
+      "lemmas": 346345,
+      "analyses": 5803266,
       "bigrams": 414007
     },
     "data-dist/lemma-is.core.bin": {
       "formatVersion": 1,
-      "bytes": 10049264,
-      "sha256": "32464d06df80fdf4112cc860289012ac67dab9fb5d2a7d737ca161cfe87f0bd4",
+      "bytes": 10028436,
+      "sha256": "d824e3156aad6f1dd0d518c1f66510e617198d3bb78dd2f967e838312d759934",
       "forms": 350000,
-      "lemmas": 99680
+      "lemmas": 98458
     },
     "data-dist/lemmas.txt.gz": {
-      "bytes": 1430513,
-      "sha256": "55600fd09fa30ecc2fdfeae775ea3fa2eace2e1764b50e630ba2400251a3744d",
-      "lemmas": 347926
+      "bytes": 1424240,
+      "sha256": "aab85047e3702e7b84f3e2392882e077fdacbb3deb6c89aca478e6881797c7d3",
+      "lemmas": 346345
     },
     "data-dist/lookup.tsv.gz": {
-      "bytes": 11070674,
-      "sha256": "124e5849398212a8fbac9e49222b959519bc13c01bbf36adff1978a1535a16ca",
-      "entries": 3372391
+      "bytes": 11049799,
+      "sha256": "c34c7505351bd868fe9a77aa685e065bce0db80982f791968183ffc40dbc984c",
+      "entries": 3372211
     }
   }
 }

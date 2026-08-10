@@ -292,6 +292,9 @@ def main():
     # word -> set of (lemma, pos, case, gender, number) tuples
     word_to_lemma_morph = defaultdict(set)
 
+    word_cap = defaultdict(set)  # lemmas with any capitalized (proper-noun) source
+    word_common = defaultdict(set)  # lemmas with any lowercase (common) source
+
     with open(SRC_FILE, 'r', encoding='utf-8') as f:
         reader = csv.reader(f, delimiter=';')
         for i, row in enumerate(reader):
@@ -303,6 +306,10 @@ def main():
                 pos = POS_MAP.get(word_class, word_class[:2] if len(word_class) >= 2 else word_class)
                 case, gender, number = parse_mark(mark, word_class)
                 word_to_lemma_morph[word_lower].add((lemma_lower, pos, case, gender, number))
+                if lemma != lemma_lower:
+                    word_cap[word_lower].add(lemma_lower)
+                else:
+                    word_common[word_lower].add(lemma_lower)
             elif len(row) >= 5:
                 # Fallback for rows without mark field
                 lemma, bin_id, word_class, domain, word_form, *rest = row
@@ -310,10 +317,28 @@ def main():
                 word_lower = word_form.lower()
                 pos = POS_MAP.get(word_class, word_class[:2] if len(word_class) >= 2 else word_class)
                 word_to_lemma_morph[word_lower].add((lemma_lower, pos, '', '', ''))
+                if lemma != lemma_lower:
+                    word_cap[word_lower].add(lemma_lower)
+                else:
+                    word_common[word_lower].add(lemma_lower)
             if i > 0 and i % 1000000 == 0:
                 print(f"  Processed {i:,} rows...")
 
     print(f"  Total word forms: {len(word_to_lemma_morph):,}")
+
+    # Drop proper-noun-only lemma readings when the word form also has a
+    # common reading (e.g. proper noun "Skólinn" vs the definite form
+    # "skólinn" of skóli). Lemmas with a lowercase source too (e.g. "á" river
+    # vs proper noun "Á", "hestur" vs place name "Hestur") are kept.
+    # Same logic as build-data.py.
+    for word in list(word_to_lemma_morph.keys()):
+        cap_only = word_cap.get(word, set()) - word_common.get(word, set())
+        if not cap_only or not word_common.get(word):
+            continue
+        lemma_set = word_to_lemma_morph[word]
+        filtered = {t for t in lemma_set if t[0] not in cap_only}
+        if filtered:
+            word_to_lemma_morph[word] = filtered
 
     # Optional word filtering for smaller core builds
     if args.top_words or args.min_freq:

@@ -83,6 +83,15 @@ def main():
     # Build word -> (lemma, pos) mapping
     # Each word form maps to a set of (lemma, pos) pairs
     word_to_lemma_pos = defaultdict(set)
+    # Track which lemmas have capitalized (proper-noun) sources vs lowercase
+    # (common) sources, per word form. When a proper-noun headword lowercases
+    # to the same string as a common word form (e.g. proper noun "Skólinn" vs
+    # the definite form "skólinn" of skóli), the proper-noun-only reading must
+    # not become its own lemma. A lemma that also has a lowercase source is
+    # kept — e.g. "á" the river is a common lemma even though proper noun "Á"
+    # exists, and "hestur" is common even though place names "Hest/Hestur" do.
+    word_cap = defaultdict(set)  # lemmas with any capitalized source
+    word_common = defaultdict(set)  # lemmas with any lowercase source
 
     with open(SRC_FILE, 'r', encoding='utf-8') as f:
         reader = csv.reader(f, delimiter=';')
@@ -95,10 +104,25 @@ def main():
                 # Map word class to simplified POS
                 pos = POS_MAP.get(word_class, word_class[:2] if len(word_class) >= 2 else word_class)
                 word_to_lemma_pos[word_lower].add((lemma_lower, pos))
+                if lemma != lemma_lower:
+                    word_cap[word_lower].add(lemma_lower)
+                else:
+                    word_common[word_lower].add(lemma_lower)
             if i > 0 and i % 1000000 == 0:
                 print(f"  Processed {i:,} rows...")
 
     print(f"  Total word forms: {len(word_to_lemma_pos):,}")
+
+    # Drop proper-noun-only lemma readings when the word form also has a
+    # common reading: lemmas sourced exclusively from capitalized headwords.
+    for word in list(word_to_lemma_pos.keys()):
+        cap_only = word_cap.get(word, set()) - word_common.get(word, set())
+        if not cap_only or not word_common.get(word):
+            continue
+        lemma_pos_set = word_to_lemma_pos[word]
+        filtered = {(lemma, pos) for lemma, pos in lemma_pos_set if lemma not in cap_only}
+        if filtered:
+            word_to_lemma_pos[word] = filtered
 
     # Build unique lemma list
     all_lemmas = set()
