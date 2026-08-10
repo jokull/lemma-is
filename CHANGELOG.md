@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - **Unknown-form inflectional fallback in `lemmatize()`**: missing word forms now strip common Icelandic endings and re-look-up the stem, returning only real dictionary lemmas — `skógs` → `skógur`, `kýrnanna` → `kýr`, `vinsins` → `vinur`, `óxum`/`óxu` → `vaxa`, and core-model gaps like `brandinn` → `brandur`. Closes #6 and the core gaps in #10.
 - **Full model ships in the npm package** (`data-dist/lemma-is.bin` plus the `lookup.tsv.gz`/`lemmas.txt.gz` sidecar). The full binary resolves every form the core leaves unchanged. Closes #10.
 - **`isKnown` on `LemmatizerLike`**; `CompoundSplitter` now requires compound parts to be raw dictionary word forms, so suffix-stripped pseudo-words (e.g. `slán` in `húsnæðislán`) can't hijack a split.
+- **Known compound headwords decompose** (`CompoundSplitter`): inflected forms of compounds the model knows as headwords now split via the headword's own decomposition (cached per headword), so the full model indexes `húsnæðisláninu` → `húsnæði` + `lán`, `kreditkortsins` → `kredit` + `kort`, `skólamatnum` → `skóla` + `matur` — previously `isCompound: false` for every headword the full model knew. Ordinary known words (hestinum, stráknum) stay protected. Closes #11.
 
 ### Changed
 

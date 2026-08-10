@@ -13,6 +13,8 @@ import {
   extractIndexableLemmas,
   buildSearchQuery,
   isStopword,
+  CompoundSplitter,
+  createKnownLemmaSet,
 } from "../src/index.js";
 
 describe("Issue regressions", () => {
@@ -153,6 +155,36 @@ describe("Issue regressions", () => {
       expect([...extractIndexableLemmas("börnin börnin", core)]).toEqual([
         "barn",
       ]);
+    });
+  });
+
+  describe("#11: known compound headwords still decompose", () => {
+    let splitter: CompoundSplitter;
+
+    beforeAll(() => {
+      splitter = new CompoundSplitter(
+        full,
+        createKnownLemmaSet(full.getAllLemmas())
+      );
+    });
+
+    it.each([
+      ["húsnæðisláninu", ["húsnæði", "lán"]],
+      ["kreditkortsins", ["kredit", "kort"]],
+      ["skólamatnum", ["skóla", "skóli", "matur"]],
+      ["húsnæðislán", ["húsnæði", "lán"]],
+    ])("split(%s) decomposes into %j", (word, expectedParts) => {
+      const result = splitter.split(word);
+      expect(result.isCompound).toBe(true);
+      for (const part of expectedParts) {
+        expect(result.parts).toContain(part);
+      }
+    });
+
+    it("ordinary known words stay protected", () => {
+      for (const word of ["hestinum", "börnin", "stráknum", "samskipti"]) {
+        expect(splitter.split(word).isCompound).toBe(false);
+      }
     });
   });
 });

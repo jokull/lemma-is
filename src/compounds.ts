@@ -221,6 +221,8 @@ export class CompoundSplitter {
   private tryLinkingLetters: boolean;
   private knownLemmas: KnownLemmaLookup;
   private mode: CompoundSplitMode;
+  /** Cached decomposition per headword, so repeated inflections stay cheap. */
+  private headwordSplitCache = new Map<string, CompoundSplit>();
 
   constructor(
     lemmatizer: LemmatizerLike,
@@ -245,6 +247,21 @@ export class CompoundSplitter {
       confidence: 0,
       isCompound: false,
     };
+  }
+
+  /**
+   * Whether a headword decomposes as a compound, cached per headword.
+   * Headwords lemmatize to themselves, so the recursive split() call
+   * never re-enters this path (isKnownWord is false for them).
+   */
+  private headwordDecomposes(lemma: string | undefined): boolean {
+    if (!lemma) return false;
+    let split = this.headwordSplitCache.get(lemma);
+    if (!split) {
+      split = this.split(lemma);
+      this.headwordSplitCache.set(lemma, split);
+    }
+    return split.isCompound;
   }
 
   /**
@@ -284,10 +301,11 @@ export class CompoundSplitter {
       return this.noSplit(word, directLemmas);
     }
 
-    // For balanced mode, don't split unambiguous known words
+    // For balanced mode, don't split unambiguous known words — unless the
+    // headword itself is a compound that decomposes (e.g. "skólamatnum" →
+    // headword "skólamatur" → skóla + matur, issue #11).
     if (this.mode === "balanced" && isKnownWord && isUnambiguous) {
-      // Exception: still try if the word is very long (likely a compound)
-      if (normalized.length < 12) {
+      if (normalized.length < 12 && !this.headwordDecomposes(primaryLemma)) {
         return this.noSplit(word, directLemmas);
       }
     }
@@ -335,6 +353,15 @@ export class CompoundSplitter {
     }
 
     if (candidates.length === 0) {
+      // No direct split of the inflected form, but its headword may still be
+      // a compound (e.g. the core model: "húsnæðisláninu" → headword
+      // "húsnæðislán" → húsnæði + lán, even though "húsnæðis" is below the
+      // core frequency cutoff). Decompose via the headword instead.
+      if (primaryLemma && primaryLemma !== normalized && this.headwordDecomposes(primaryLemma)) {
+        const lemmaSplit = this.headwordSplitCache.get(primaryLemma)!;
+        const indexTerms = [...new Set([...lemmaSplit.indexTerms, normalized])];
+        return { ...lemmaSplit, word, indexTerms };
+      }
       return this.noSplit(word, directLemmas);
     }
 
@@ -342,9 +369,14 @@ export class CompoundSplitter {
     candidates.sort((a, b) => b.score - a.score);
     const best = candidates[0];
 
-    // In balanced mode, require higher confidence for known words
+    // In balanced mode, require higher confidence for known words — unless
+    // the headword itself is a compound that decomposes, in which case its
+    // inflected forms should decompose too (e.g. "húsnæðisláninu" → headword
+    // "húsnæðislán" → húsnæði + lán).
     if (this.mode === "balanced" && isKnownWord && best.score < 0.6) {
-      return this.noSplit(word, directLemmas);
+      if (!this.headwordDecomposes(primaryLemma)) {
+        return this.noSplit(word, directLemmas);
+      }
     }
 
     // Collect all unique parts from best split
