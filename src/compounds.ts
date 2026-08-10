@@ -101,6 +101,53 @@ export const PROTECTED_LEMMAS = new Set([
   "arionbanki",
   // Institutions
   "alþingi",
+  // Names / foreign places (junk splits, from scripts/compound-review.mts)
+  "margrét",
+  "sæmundur",
+  "vífill",
+  "halldór",
+  "melkorka",
+  "elliði",
+  "kanslari",
+  "flórída",
+  "kanada",
+  "london",
+  "króatía",
+  "afganistan",
+  "tindastóll",
+  "látrabjarg",
+  "álftanes",
+  "kringlumýrarbraut",
+  "guðmundur",
+  "kristjana",
+  // Ordinary words with junk splits (derivations or prefix+root)
+  "forseti",
+  "heimild",
+  "nauðsyn",
+  "samstarf",
+  "frumvarp",
+  "mistök",
+  "alfarið",
+  "leikinn",
+  "austan",
+  "suðaustur",
+  "þrefalt",
+  "fjölbreytni",
+  "skýring",
+  "riðill",
+  "ofurölvi",
+  "organisti",
+  "maríjúana",
+  "einstaklingur",
+  "sjúklingur",
+  "fjölyrða",
+  "umtalsvert",
+  "undrandi",
+  "skrápflúra",
+  "veiking",
+  "kolbeinn",
+  "merking",
+  "endurspegla",
 ]);
 
 export interface CompoundSplit {
@@ -215,6 +262,60 @@ const COMMON_STANDALONE = new Set([
  */
 const LINKING_PATTERNS = ["s", "u", "a"];
 
+/**
+ * Derivational suffixes that look like compound parts but never are.
+ * Splits whose right part is one of these are derivations, not compounds:
+ * agent nouns in -ari (kennari → kenna + ari), adverbs/adjectives in
+ * -lega/-leg (ágætlega → ágætur + lega), diminutives in -lingur
+ * (einstaklingur → einstak + lingur). Indexing the suffix as a part is pure
+ * noise. Found via scripts/compound-review.mts with corpus evidence.
+ */
+export const DERIVATIONAL_SUFFIX_LEMMAS = new Set([
+  "ari",
+  "ar",
+  "leg",
+  "lega",
+  "lingur",
+  "ling",
+  "andi", // present participles / agent nouns (villandi → vil + andi)
+]);
+
+/**
+ * Words that fail algorithmic splitting (a part is not a dictionary word
+ * form) but are transparent compounds worth decomposing for recall — e.g.
+ * "samgöngur" contains "göngur", a word form of "ganga". Values are the
+ * explicit part lemmas to index alongside the word itself. Curated from
+ * scripts/compound-review.mts output with corpus-frequency evidence.
+ */
+const ALWAYS_SPLIT_OVERRIDES: Record<string, string[]> = {
+  samgöngur: ["ganga"],
+  samgöngumál: ["ganga", "mál"],
+  samverkamaður: ["maður"],
+  námsárangur: ["nám", "árangur"], // algorithmic split picks námsár + angur (junk)
+  fíkniefni: ["efni"],
+  handtaka: ["hönd", "taka"],
+  handhafi: ["hönd", "hafi"],
+  fjarvera: ["vera"],
+  samvera: ["vera"],
+  samkoma: ["koma"],
+  samtíma: ["tími"],
+  samræða: ["ræða"],
+  aflandskróna: ["króna"],
+  kaffisamsæti: ["sæti"],
+  miðfjarðarrétt: ["rétt"],
+  launungarmál: ["mál"],
+  tiltökumál: ["mál"],
+  æskulýðsmál: ["mál"],
+  milliríkjamál: ["mál"],
+  flæðarmál: ["mál"],
+  klögumál: ["mál"],
+  spursmál: ["mál"],
+  hávamál: ["mál"],
+  eftirsóknarverður: ["verður"],
+  eftirtektarverður: ["verður"],
+  aðfinnsluverður: ["verður"],
+};
+
 export class CompoundSplitter {
   private lemmatizer: LemmatizerLike;
   private minPartLength: number;
@@ -285,6 +386,22 @@ export class CompoundSplitter {
     // Also check if the word itself is protected (for inflected forms)
     if (PROTECTED_LEMMAS.has(normalized)) {
       return this.noSplit(word, directLemmas);
+    }
+
+    // Curated always-split overrides: words whose algorithmic split fails
+    // (a part is not a dictionary word form) but that are transparent
+    // compounds — index the explicit part lemmas alongside the word.
+    const overrideParts = ALWAYS_SPLIT_OVERRIDES[normalized];
+    if (overrideParts) {
+      const parts = [...new Set([...directLemmas, ...overrideParts])];
+      const indexTerms = [...new Set([...parts, normalized])];
+      return {
+        word,
+        parts,
+        indexTerms,
+        confidence: 1,
+        isCompound: true,
+      };
     }
 
     // Step 2: Check if known in BÍN and unambiguous
@@ -444,6 +561,13 @@ export class CompoundSplitter {
     const rightKnown = [...new Set(rightLemmas.filter((l) => this.knownLemmas.has(l)))];
 
     if (leftKnown.length === 0 || rightKnown.length === 0) {
+      return null;
+    }
+
+    // Reject derivational-suffix splits: the right part is an agent-noun /
+    // adverb / diminutive suffix, never a genuine compound part (kennari →
+    // kenna + ari, ágætlega → ágætur + lega).
+    if (rightKnown.some((l) => DERIVATIONAL_SUFFIX_LEMMAS.has(l))) {
       return null;
     }
 

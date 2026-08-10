@@ -187,4 +187,73 @@ describe("Issue regressions", () => {
       }
     });
   });
+
+  describe("curated compound overrides (occurrence-data-guided)", () => {
+    let splitter: CompoundSplitter;
+
+    beforeAll(() => {
+      splitter = new CompoundSplitter(
+        full,
+        createKnownLemmaSet(full.getAllLemmas())
+      );
+    });
+
+    it("never splits names and derivations (blacklist)", () => {
+      for (const word of [
+        "margrét",
+        "sæmundur",
+        "halldór",
+        "guðmundur",
+        "forseti",
+        "heimild",
+        "nauðsyn",
+        "samstarf",
+        "mistök",
+        "leikinn",
+        "austan",
+        "kennari",
+        "leikari",
+        "ágætlega",
+        "örugglega",
+        "nákvæmlega",
+        "einstaklingur",
+        "sjúklingur",
+        "annars",
+      ]) {
+        expect(splitter.split(word).isCompound).toBe(false);
+      }
+    });
+
+    it("still splits genuine compounds", () => {
+      for (const [word, part] of [
+        ["húsnæðislán", "lán"],
+        ["tónlist", "list"],
+        ["sjúkrahús", "hús"],
+        ["gæsluvarðhald", "varðhald"],
+        ["hrísgrjón", "grjón"],
+        ["kynslóð", "slóð"],
+        ["gagnrýni", "rýni"],
+        ["leikskóli", "skóli"],
+      ] as const) {
+        expect(splitter.split(word).parts).toContain(part);
+      }
+    });
+
+    it("always-split overrides index explicit parts", () => {
+      for (const [word, part] of [
+        ["samgöngur", "ganga"],
+        ["samgöngumál", "mál"],
+        ["handtaka", "taka"],
+        ["handhafi", "hafi"],
+        ["fíkniefni", "efni"],
+        ["námsárangur", "árangur"],
+        ["samtíma", "tími"],
+        ["samkoma", "koma"],
+      ] as const) {
+        const result = splitter.split(word);
+        expect(result.isCompound).toBe(true);
+        expect(result.parts).toContain(part);
+      }
+    });
+  });
 });
