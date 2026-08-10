@@ -139,9 +139,13 @@ function applyRule(
   candidates: LemmaWithPOS[],
   context: DisambiguationContext
 ): LemmaWithPOS | null {
-  // Find candidates matching the word and preferred POS
+  // Find candidates matching the preferred POS. The preferred reading's
+  // lemma may differ from `rule.word` ("á" as a verb is "eiga"), so match
+  // on preferLemma when the rule provides one — otherwise the candidate
+  // never matches and the rule is dead.
+  const preferredLemma = (rule.preferLemma ?? rule.word).toLowerCase();
   const preferredCandidate = candidates.find(
-    (c) => c.lemma.toLowerCase() === rule.word.toLowerCase() && c.pos === rule.prefer
+    (c) => c.lemma.toLowerCase() === preferredLemma && c.pos === rule.prefer
   );
   const dispreferred = candidates.find(
     (c) => c.lemma.toLowerCase() === rule.word.toLowerCase() && c.pos === rule.over

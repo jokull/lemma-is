@@ -24,6 +24,13 @@ export interface DisambiguationRule {
   context: "before_noun" | "before_verb" | "after_pronoun" | "sentence_start" | "any";
   /** Optional description */
   description?: string;
+  /**
+   * Lemma to match for the preferred reading when it differs from `word`.
+   * "á" as a verb lemmatizes to "eiga", not "á" — without this the
+   * preferred candidate can never match and the rule is structurally dead.
+   * Defaults to `word`.
+   */
+  preferLemma?: string;
 }
 
 /**
@@ -45,6 +52,7 @@ export const DISAMBIGUATION_RULES: DisambiguationRule[] = [
     prefer: "so", // verb "eiga"
     over: "fs", // preposition
     context: "after_pronoun",
+    preferLemma: "eiga", // the verb reading of "á" lemmatizes to "eiga"
     description: "á after pronoun = verb 'eiga' (I own, you own)",
   },
   {

@@ -11,12 +11,18 @@ import {
 } from "../src/index.js";
 
 let lem: BinaryLemmatizer;
+let fullLem: BinaryLemmatizer;
 
 beforeAll(() => {
   const binPath = join(import.meta.dirname, "../data-dist/lemma-is.core.bin");
   const buf = readFileSync(binPath);
   lem = BinaryLemmatizer.loadFromBuffer(
     buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+  );
+  const fullPath = join(import.meta.dirname, "../data-dist/lemma-is.bin");
+  const fullBuf = readFileSync(fullPath);
+  fullLem = BinaryLemmatizer.loadFromBuffer(
+    fullBuf.buffer.slice(fullBuf.byteOffset, fullBuf.byteOffset + fullBuf.byteLength)
   );
 });
 
@@ -110,6 +116,57 @@ describe("á disambiguation — verb eiga vs preposition", () => {
 
     it("á morgun fer ég í vinnuna — á morgun is prepositional phrase", () => {
       expect(getDisambiguatedA("Á morgun fer ég í vinnuna")).toEqual(["á"]);
+    });
+  });
+
+  describe("full model — issue #12 (pronoun subjects → eiga)", () => {
+    /** Get the disambiguated lemma of "á" in a sentence (full model). */
+    function getA(text: string): string[] {
+      const tokens = processText(text, fullLem, { bigrams: fullLem });
+      return tokens
+        .filter((t) => t.original.toLowerCase() === "á")
+        .map((t) => t.disambiguated ?? t.lemmas.join(","));
+    }
+
+    it("Ég á bíl — pronoun subject, accusative object", () => {
+      expect(getA("Ég á bíl")).toEqual(["eiga"]);
+    });
+
+    it("Ég á bílinn — definite accusative object", () => {
+      expect(getA("Ég á bílinn")).toEqual(["eiga"]);
+    });
+
+    it("Ég á hest / Hann á hest / hann á bíl — pronoun subjects", () => {
+      expect(getA("Ég á hest")).toEqual(["eiga"]);
+      expect(getA("Hann á hest")).toEqual(["eiga"]);
+      expect(getA("hann á bíl")).toEqual(["eiga"]);
+    });
+
+    it("Hún á hest — pronoun subject without noun homograph dependency", () => {
+      expect(getA("Hún á hest")).toEqual(["eiga"]);
+    });
+
+    it("Ég á ekki / Hann á ekki — pronoun + á + negation", () => {
+      expect(getA("Ég á ekki")).toEqual(["eiga"]);
+      expect(getA("Hann á ekki")).toEqual(["eiga"]);
+    });
+
+    it("Ég fer á fjallið — verb-dominant prev word is not a subject", () => {
+      expect(getA("Ég fer á fjallið")).toEqual(["á"]);
+    });
+
+    it("þau búa á akureyri — verb-dominant prev word is not a subject", () => {
+      expect(getA("Þau búa á Akureyri")).toEqual(["á"]);
+    });
+
+    it("preposition rows stay preposition", () => {
+      expect(getA("Bókin er á borðinu")).toEqual(["á"]);
+      expect(getA("Strákarnir á Íslandi")).toEqual(["á"]);
+      expect(getA("Á morgun fer ég í vinnuna")).toEqual(["á"]);
+    });
+
+    it("Hún á hús á landinu — first á verb, second preposition", () => {
+      expect(getA("Hún á hús á landinu")).toEqual(["eiga", "á"]);
     });
   });
 });

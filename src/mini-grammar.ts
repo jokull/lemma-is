@@ -372,19 +372,37 @@ export function applySubjectVerbRule(
   if (!nextIsNounPhrase) return null;
 
   // Check if previous word is a confident nominative subject.
+  // Subjects can be nouns OR pronouns ("Ég", "Hann", "Hún") — pure
+  // pronouns have no noun reading, so the gate must accept both.
   const prevMorph = lemmatizer.lemmatizeWithMorph(prevWord);
   const prevHasNoun = prevMorph.some((m) => m.pos === "no");
+  const prevHasPronoun = prevMorph.some((m) => m.pos === "fn");
   const prevHasVerb = prevMorph.some((m) => m.pos === "so");
 
-  if (!prevHasNoun) return null;
+  if (!prevHasNoun && !prevHasPronoun) return null;
+
+  // A verb-dominant previous word is the verb of its own clause, not the
+  // subject — BÍN carries rare noun homographs for verb forms ("fer" from
+  // fara, "búa") that would otherwise masquerade as nominative subjects:
+  // "Ég fer á fjallið" → á is the preposition, not "eiga". Pronouns with
+  // a verb homograph ("sá" = he/that one vs. sjá) still count as subjects,
+  // and a definite-article suffix (-ið, -inn, ...) marks a noun form so
+  // strongly that "Barnið" is a subject despite the imperative "barnið".
+  if (prevHasVerb && !prevHasPronoun) {
+    const prevSuffixCases = inferCaseFromSuffix(prevWord);
+    if (!prevSuffixCases.has("nf")) return null;
+  }
 
   // Use morph case data if available
   let prevHasNominative = prevMorph.some(
     (m) => m.morph?.case === "nf" && (m.pos === "no" || m.pos === "fn")
   );
 
-  // Fallback: infer from suffix if morph data lacks case
-  if (!prevHasNominative) {
+  // Fallback: infer from suffix if morph data lacks case.
+  // Only for noun readings — a bare noun's base form is nominative, but a
+  // bare pronoun is not ("mig" is accusative), so pronouns must not fall
+  // through here.
+  if (!prevHasNominative && prevHasNoun) {
     const prevSuffixCases = inferCaseFromSuffix(prevWord);
     if (prevSuffixCases.has("nf")) {
       // Definite suffix like -inn/-ið/-nar confirms it's a noun
