@@ -36,7 +36,7 @@ exports[`Processing Pipeline > Benchmark Metrics > NEWS paragraph > NEWS metrics
   "compoundsFound": 8,
   "coverage": 0.75,
   "entitiesSkipped": 0,
-  "uniqueLemmas": 51,
+  "uniqueLemmas": 49,
 }
 `;
 
@@ -46,6 +46,6 @@ exports[`Processing Pipeline > Benchmark Metrics > TECHNICAL paragraph > TECHNIC
   "compoundsFound": 5,
   "coverage": 0.72,
   "entitiesSkipped": 0,
-  "uniqueLemmas": 37,
+  "uniqueLemmas": 35,
 }
 `;

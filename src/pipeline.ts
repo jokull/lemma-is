@@ -67,6 +67,11 @@ const NUMBER_LIKE_KINDS = new Set([
  * Icelandic case suffixes to strip from unknown words (longest first).
  * Ordered by length to prefer longer matches.
  */
+/** "umhverfis- og samgöngunefnd": dangling head, conjunction, full word. */
+const COORDINATION_TOKEN = /^(\S+)-\s+(og|eða|né)\s+(\S+)$/iu;
+/** Shortest tail of the full word tried when reconstructing the head's word. */
+const MIN_COORDINATION_TAIL = 3;
+
 const UNKNOWN_SUFFIXES = [
   // Definite + case (longest)
   "arinnar", // fem gen def
@@ -197,6 +202,10 @@ export function processText(
   const isUnknownLemma = (raw: string, lemmas: string[]): boolean =>
     lemmas.length === 1 && lemmas[0] === raw.toLowerCase();
 
+  /** A suffix-stripped foreign-name guess: not a dictionary form or lemma. */
+  const isStrippedGuess = (lemma: string): boolean =>
+    !lemmatizer.isKnown?.(lemma) && isUnknownLemma(lemma, lemmatizer.lemmatize(lemma));
+
   /**
    * Try stripping Icelandic suffixes from unknown words.
    * Returns known lemmas if found, otherwise returns the stripped form
@@ -244,10 +253,44 @@ export function processText(
     return candidates.length > 0 ? [...new Set(candidates)] : null;
   };
 
+  /**
+   * Hyphenated coordination of compounds sharing a tail ("umhverfis- og
+   * samgöngunefnd"): tokenize-is yields it as one word token. Resolve it to
+   * its full words — the second as written, the first reconstructed from the
+   * dangling head plus the shortest tail of the second that makes a
+   * dictionary word (umhverfis + nefnd → umhverfisnefnd). Returns null for
+   * ordinary tokens; the head alone when nothing reconstructs.
+   */
+  const coordinationWords = (raw: string): { words: string[]; head: string } | null => {
+    const m = COORDINATION_TOKEN.exec(raw);
+    if (!m) return null;
+    const [, head, , full] = m;
+    const words = [full];
+    for (let i = full.length - MIN_COORDINATION_TAIL; i >= 1; i--) {
+      const candidate = head + full.slice(i);
+      if (lemmatizer.isKnown?.(candidate)) {
+        words.unshift(candidate);
+        break;
+      }
+    }
+    return { words, head };
+  };
+
   const getLemmas = (raw: string): string[] => {
     const key = raw.toLowerCase();
     const cached = lemmaCache.get(key);
     if (cached) return cached;
+
+    const coordination = coordinationWords(raw);
+    if (coordination) {
+      const { words, head } = coordination;
+      // Lemmas of the resolved words; the head's own lemmas only when it
+      // could not be reconstructed. Never the raw multi-word token.
+      const sources = words.length > 1 ? words : [head, ...words];
+      const combined = [...new Set(sources.flatMap((w) => getLemmas(w)))];
+      lemmaCache.set(key, combined);
+      return combined;
+    }
 
     const lemmas = lemmatizer.lemmatize(raw);
 
@@ -339,15 +382,37 @@ export function processText(
       const isUnknownWord = lemmas.length === 1 && lemmas[0] === tokenText.toLowerCase();
 
       if (compoundSplitter && (alwaysTryCompounds || isUnknownWord)) {
-        const split = compoundSplitter.split(tokenText);
-        if (split.isCompound) {
+        // A coordination token ("umhverfis- og samgöngunefnd") splits as
+        // its resolved words, never as the raw multi-word string.
+        const coordination = coordinationWords(tokenText);
+        const splits = (coordination?.words ?? [tokenText])
+          .map((w) => compoundSplitter.split(w))
+          .filter((s) => s.isCompound);
+        if (splits.length > 0) {
+          const split = splits.length === 1
+            ? splits[0]
+            : {
+                word: tokenText,
+                parts: [...new Set(splits.flatMap((s) => s.parts))],
+                indexTerms: [...new Set(splits.flatMap((s) => s.indexTerms))],
+                confidence: Math.min(...splits.map((s) => s.confidence)),
+                isCompound: true,
+              };
           processed.compoundSplit = split;
           // Parts are already lemmas (headwords). Re-lemmatizing them would
           // expand each headword into its homographs (stjóri → stjóra/stjór,
           // heilbrigði → heilbrigður, kerfi → kerfa) — pure index noise.
           const partLemmas = [...split.parts];
           processed.compoundLemmas = partLemmas;
-          processed.lemmas = [...new Set([...lemmas, ...partLemmas])];
+          // An unknown word that decomposes is an Icelandic compound, not a
+          // foreign name: drop the suffix-stripped guesses the unknown-word
+          // fallback added (vindorkuverkefna → "vindorkuverkefn").
+          const base = isUnknownWord || !stripUnknownSuffixes
+            ? lemmas
+            : lemmas.filter(
+                (l) => l === tokenText.toLowerCase() || !isStrippedGuess(l)
+              );
+          processed.lemmas = [...new Set([...base, ...partLemmas])];
         }
       }
 

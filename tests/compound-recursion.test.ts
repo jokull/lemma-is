@@ -18,6 +18,7 @@ import {
   createKnownLemmaSet,
   extractIndexableLemmas,
   processText,
+  buildSearchQuery,
 } from "../src/index.js";
 
 const load = (name: string) => {
@@ -156,6 +157,38 @@ describe("Recursive compound decomposition (full model)", () => {
     for (const bad of ["heilbrigður", "stjóra", "stjór", "ríkir", "ríkja", "ríkur"]) expect(idx).not.toContain(bad);
     const token = processText("lögreglustjóraembættin", full, opts)[0];
     expect(token.compoundLemmas).toEqual(["lögreglustjóri", "embætti", "lögregla", "stjóri"]);
+  });
+
+  it("hyphenated coordination resolves to full words, never a multi-word lemma (L3)", () => {
+    const opts = { bigrams: full, compoundSplitter: splitter, removeStopwords: true };
+    const tokens = processText("umhverfis- og samgöngunefnd", full, opts);
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].lemmas).toEqual(["umhverfisnefnd", "samgöngunefnd", "umhverfi", "nefnd"]);
+    expect(tokens[0].compoundLemmas).toEqual(["umhverfi", "nefnd"]);
+    for (const text of ["umhverfis- og samgöngunefnd", "hljóð- og myndmiðlun", "allsherjar- eða menntamálanefnd"]) {
+      for (const l of extractIndexableLemmas(text, full, opts)) {
+        expect(l, text).not.toMatch(/\s|^og$|^eða$/);
+      }
+    }
+    const idx = [...extractIndexableLemmas("hljóð- og myndmiðlun", full, opts)];
+    expect(idx).toEqual(expect.arrayContaining(["hljóðmiðlun", "myndmiðlun", "hljóð", "mynd", "miðlun"]));
+    // The same text at query time resolves to the same lexemes
+    expect(buildSearchQuery("umhverfis- og samgöngunefnd", full, opts).groups.flat()).toContain("umhverfisnefnd");
+  });
+
+  it("an unknown word that decomposes keeps no suffix-stripped guess (L5)", () => {
+    const opts = { bigrams: full, compoundSplitter: splitter, removeStopwords: true };
+    const idx = [...extractIndexableLemmas("vindorkuverkefna", full, opts)];
+    expect(idx).toEqual(expect.arrayContaining(["vindorkuverkefna", "vindorka", "verkefni"]));
+    expect(idx).not.toContain("vindorkuverkefn");
+    // Foreign names still get their stripped base form
+    expect([...extractIndexableLemmas("Obamas", full, opts)]).toContain("obama");
+  });
+
+  it("umhverfismál, meðalhóf, innanríkisráðherra (L1/L2)", () => {
+    expect(splitter.split("umhverfismál").parts).toEqual(["umhverfi", "mál"]);
+    expect(splitter.split("meðalhóf").parts).toEqual(["meðal", "hóf"]);
+    expect(splitter.split("innanríkisráðherra").parts).toEqual(["ráðherra"]);
   });
 
   it("curated short simplex words with accidental splits stay whole", () => {

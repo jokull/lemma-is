@@ -375,10 +375,12 @@ export const PRODUCTIVE_PREFIXES: Record<string, string | null> = {
   innanríkis: null,
 };
 
-/** Parts at least this long are decomposed further (recursive splitting). */
+/**
+ * Parts at least this long are decomposed further (recursive splitting).
+ * Recursion is bounded by length — each level is a strictly shorter string —
+ * and the "in progress" cache sentinel guards against cycles.
+ */
 const RECURSE_MIN_LENGTH = 10;
-/** Maximum nesting of recursive decomposition. */
-const MAX_DEPTH = 3;
 /**
  * Among competing noun readings of one surface part, drop lemmas whose
  * corpus-frequency rank is this many times worse than the best reading
@@ -489,7 +491,7 @@ export class CompoundSplitter {
    * are decomposed further, keeping the intermediate lemma as a part too
    * (lögreglustjóraembætti → lögreglustjóri + embætti → lögregla + stjóri).
    */
-  private headwordSplit(lemma: string, depth = 0): CompoundSplit {
+  private headwordSplit(lemma: string): CompoundSplit {
     const cached = this.headwordSplitCache.get(lemma);
     if (cached) return cached;
 
@@ -497,6 +499,9 @@ export class CompoundSplitter {
     const self = this.noSplit(lemma, directLemmas);
     // Cycle guard: a part whose decomposition is in progress is a no-split.
     this.headwordSplitCache.set(lemma, self);
+    // Unknown strings (typos, names) never recur as headwords of other
+    // words; caching them would grow without bound on a long reindex.
+    const cacheable = this.lemmatizer.isKnown?.(lemma) ?? true;
 
     let result = this.curated(lemma, lemma, directLemmas);
     if (!result) {
@@ -504,14 +509,12 @@ export class CompoundSplitter {
       const best = this.bestCandidate(lemma, this.headClasses(lemma));
       if (best) {
         const parts = [...new Set([...best.leftParts, ...best.rightParts])];
-        if (depth < MAX_DEPTH) {
-          for (const part of [...parts]) {
-            if (part === lemma || !this.shouldRecurse(part)) continue;
-            const sub = this.headwordSplit(part, depth + 1);
-            if (sub.isCompound) {
-              for (const p of sub.parts) {
-                if (p !== lemma && !parts.includes(p)) parts.push(p);
-              }
+        for (const part of [...parts]) {
+          if (part === lemma || !this.shouldRecurse(part)) continue;
+          const sub = this.headwordSplit(part);
+          if (sub.isCompound) {
+            for (const p of sub.parts) {
+              if (p !== lemma && !parts.includes(p)) parts.push(p);
             }
           }
         }
@@ -524,7 +527,11 @@ export class CompoundSplitter {
         };
       }
     }
-    this.headwordSplitCache.set(lemma, result);
+    if (cacheable) {
+      this.headwordSplitCache.set(lemma, result);
+    } else {
+      this.headwordSplitCache.delete(lemma);
+    }
     return result;
   }
 
