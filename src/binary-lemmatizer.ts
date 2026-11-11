@@ -460,7 +460,9 @@ export class BinaryLemmatizer implements LemmatizerLike, BigramProvider {
 
       if (!seen.has(key)) {
         seen.add(key);
-        result.push({ lemma, pos });
+        // The lemma table is sorted by corpus frequency at build time, so the
+        // lemma index doubles as a frequency rank.
+        result.push({ lemma, pos, rank: lemmaIdx });
       }
     }
 
@@ -499,6 +501,7 @@ export class BinaryLemmatizer implements LemmatizerLike, BigramProvider {
       result.push({
         lemma: this.getLemma(lemmaIdx),
         pos: CODE_TO_POS[posCode] ?? ("" as WordClass),
+        rank: lemmaIdx,
         morph: Object.keys(morph).length > 0 ? morph : undefined,
       });
     }

@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Recursive compound decomposition** (`CompoundSplitter`): a constituent that is itself a dictionary compound is decomposed further (depth ≤ 3; only constituents of 10+ letters or carrying a productive prefix), keeping the intermediate lemma — `lögreglustjóraembættin` → `lögreglustjóri` + `embætti` + `lögregla` + `stjóri`, `ríkislögreglustjóri` → `ríkislögregla` + `stjóri` + `ríki` + `lögregla`, `húsnæðislánasjóður` → `húsnæðislán` + `sjóður` + `húsnæði` + `lán`.
+- **`PRODUCTIVE_PREFIXES`** (exported, curated): `ríkis-` → `ríki`, `höfuð-` → `höfuð`, `aðal-`/`endur-`/`utanríkis-`/`innanríkis-` → nothing. `aðalmeðferð` indexes `meðferð` (not `aðal` + `aðall`), `utanríkisráðherra` indexes `ráðherra` (not `utan` + `ríkisráðherra`), `endurskoða` → `skoða` (not `önd`).
+- **`NEVER_PART_LEMMAS`** (exported, curated): rare noun homographs of frequent inflected forms that frequency cannot separate (`lagi`, `máli`, `ríkir`, `verki`, `landi`, `vaxta`) are never indexed as constituents.
+- `LemmaWithPOS.rank` — corpus-frequency rank of the lemma (`BinaryLemmatizer` fills it in `lemmatizeWithPOS`/`lemmatizeWithMorph`); `LemmatizerLike.lemmatizeWithMorph?`.
+
+### Changed
+
+- **Compound parts are headwords only, and constituent readings are selected rather than accumulated.** Known words decompose via their primary headword (so every inflection of `lögreglustjóri` yields `lögregla` + `stjóri`; `loftslagsmálum` → `loftslag` + `mál`, not `máli`/`mála`; `kjarasamningar` → `samningur`, not `samning`). Per constituent: the tail shares a word class with the whole word (Icelandic compounds are right-headed — a noun never ends in the verb `stjóra` or the adjective `illur`), a tail that is itself a noun headword is that lemma only, a genitive first part resolves to its noun (`vaxta-` → `vöxtur`, `skóla-` → `skóli`), noun readings beat verb/adjective readings, and noun homographs 10× rarer than the best reading are dropped (`stjór`, `herri`, `sjár`, `alþing`). Verb homographs (`borga`, `embætta`, `mála`, `framkvæma`) and function-word readings (`þegar`) no longer appear in `parts`.
+- **`processText`/`extractIndexableLemmas` index compound parts as-is** instead of re-lemmatizing them; re-lemmatizing a headword expanded it into every homograph of its own surface form (`stjóri` → `stjóra`/`stjór`, `heilbrigði` → `heilbrigður`, `kerfi` → `kerfa`).
+- Constituent frequency is a small scoring factor (5%), breaking near-ties toward frequent constituents (`höfuðborg` + `svæði` over `höfuð` + `borgarsvæði`).
+- `ALWAYS_SPLIT_OVERRIDES` results no longer list the word itself in `parts` (it stays in `indexTerms`). New overrides: `samgönguráðherra`/`samgönguráðuneyti` (algorithmic split was `samgönguráð` + `herra`), `landbúnaður` (was `landbú` + `naður`).
+- `PROTECTED_LEMMAS` additions: lexicalized `lögregla`, `heilbrigði`, `kynslóð`; frequent short simplex words whose headword happens to split into two dictionary forms (`lítill` → `lít` + `illur`, `heimill`, `flókinn`, `þekking`, `forsenda`, `kostnaður`, `tilfelli`, `enginn`, `sérstakur`, `höfundur`, `pólitískur`, `tiltekinn`). `DERIVATIONAL_SUFFIX_LEMMAS` also matches the surface tail: `-leysi`, `-semi`, `-skapur`.
+- Measured on 2,458 documents (IGC samples + althingi speech fixtures, balanced mode): −14% document-level index terms; 26.3k part occurrences removed (top: `staði`, `viða`, `inni`, `sjár`, `lögur`, `ingi`, `réttir`, `ráði`, `verkur`, `för` — all homographs), 1.9k added (top: `völlur`, `lýsing`, `þjóð`, `stæði`, `þing`, `festing`, `heimur`, `minjar`, `ríki`, `lögregla`). Benchmark snapshots: `uniqueLemmas` down 2–4 per paragraph, LITERARY `compoundsFound` 3 → 1 (`gluggann` → `gluggur` + `unna` and `fuglana` → `fugl` + `ana` no longer split).
+
 ## [0.12.0] - 2026-08-10
 
 ### Added

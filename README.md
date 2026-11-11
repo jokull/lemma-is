@@ -182,12 +182,14 @@ const splitter = new CompoundSplitter(lemmatizer, knownLemmas, {
 The splitter's curated lists are exported and extensible — add your own never-split words or derivational suffixes:
 
 ```typescript
-import { PROTECTED_LEMMAS, DERIVATIONAL_SUFFIX_LEMMAS } from "lemma-is";
+import { PROTECTED_LEMMAS, DERIVATIONAL_SUFFIX_LEMMAS, PRODUCTIVE_PREFIXES, NEVER_PART_LEMMAS } from "lemma-is";
 PROTECTED_LEMMAS.add("mittfirnarnafn");        // stop splitting a word
 DERIVATIONAL_SUFFIX_LEMMAS.add("lingur");      // never split before these
+PRODUCTIVE_PREFIXES["sam"] = null;             // strip a prefix; index its lemma (or nothing)
+NEVER_PART_LEMMAS.add("lagi");                 // never index this lemma as a constituent
 ```
 
-(`PROTECTED_LEMMAS` and `DERIVATIONAL_SUFFIX_LEMMAS` are shared module state — mutating them affects every splitter in the process.)
+(These curated lists are shared module state — mutating them affects every splitter in the process.)
 
 ### Handle reference
 
@@ -246,9 +248,19 @@ const knownLemmas = createKnownLemmaFilter(lemmatizer.getAllLemmas());
 const splitter = new CompoundSplitter(lemmatizer, knownLemmas);
 
 splitter.split("landbúnaðarráðherra");
-// → { isCompound: true, parts: ["landbúnaður", "ráðherra"] }
-// "agriculture minister"
+// → { isCompound: true, parts: ["landbúnaður", "ráðherra", "land", "búnaður"] }
+// "agriculture minister" — constituents that are compounds themselves are
+// decomposed further (bounded depth), and the intermediate lemma is kept
+
+splitter.split("lögreglustjóraembættin");
+// → parts: ["lögreglustjóri", "embætti", "lögregla", "stjóri"]
 ```
+
+Parts are always headwords. Inflected forms decompose via their headword, so every
+form of a compound yields the same parts, and the constituent readings are selected,
+not accumulated: the tail of a noun is a noun (`stjóri`, never the verb `stjóra`), a
+genitive first part resolves to its noun (`vaxta-` → `vöxtur`), and rare homographs
+of a constituent's surface string (`stjór`, `herri`) are dropped by corpus frequency.
 
 ### Full Pipeline
 

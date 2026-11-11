@@ -334,7 +334,8 @@ describe("Compound word indexing", () => {
     const result = splitter.split("landbúnaðarráðherra");
 
     expect(result.isCompound).toBe(true);
-    expect(result.parts).toEqual(["landbúnaður", "ráðherra"]);
+    // Recursive: landbúnaður is itself decomposed, intermediate kept
+    expect(result.parts).toEqual(["landbúnaður", "ráðherra", "land", "búnaður"]);
     expect(result.confidence).toBeGreaterThan(0.8); // Relaxed - new scoring system
 
     // Search for "ráðherra" (minister) should find this document!
@@ -390,11 +391,11 @@ describe("Compound word indexing", () => {
     expect(result.parts).toContain("stjóri"); // leader
     expect(result.confidence).toBeGreaterThan(0);
 
-    // Search for "borg" (city) finds documents mentioning mayor
-    // indexTerms includes all variants + original word for better recall
+    // Search for "borg" (city) finds documents mentioning mayor.
+    // The verb homograph "borga" (to pay) of "borgar" is not a constituent.
     const indexedLemmas = new Set(splitter.getAllLemmas("borgarstjóri"));
     expect(indexedLemmas).toContain("borg");
-    expect(indexedLemmas).toContain("borga"); // variant included for recall
+    expect(indexedLemmas).not.toContain("borga");
     expect(indexedLemmas).toContain("borgarstjóri"); // original word
   });
 

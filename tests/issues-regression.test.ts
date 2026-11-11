@@ -171,7 +171,7 @@ describe("Issue regressions", () => {
     it.each([
       ["húsnæðisláninu", ["húsnæði", "lán"]],
       ["kreditkortsins", ["kredit", "kort"]],
-      ["skólamatnum", ["skóla", "skóli", "matur"]],
+      ["skólamatnum", ["skóli", "matur"]], // not the verb skóla
       ["húsnæðislán", ["húsnæði", "lán"]],
     ])("split(%s) decomposes into %j", (word, expectedParts) => {
       const result = splitter.split(word);
@@ -219,6 +219,9 @@ describe("Issue regressions", () => {
         "einstaklingur",
         "sjúklingur",
         "annars",
+        "kynslóð",
+        "lögregla",
+        "heilbrigði",
       ]) {
         expect(splitter.split(word).isCompound).toBe(false);
       }
@@ -231,7 +234,6 @@ describe("Issue regressions", () => {
         ["sjúkrahús", "hús"],
         ["gæsluvarðhald", "varðhald"],
         ["hrísgrjón", "grjón"],
-        ["kynslóð", "slóð"],
         ["gagnrýni", "rýni"],
         ["leikskóli", "skóli"],
       ] as const) {

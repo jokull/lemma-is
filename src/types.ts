@@ -110,6 +110,11 @@ export interface MorphFeatures {
 export interface LemmaWithPOS {
   lemma: string;
   pos: WordClass;
+  /**
+   * Corpus-frequency rank of the lemma in the model (0 = most frequent).
+   * Set by BinaryLemmatizer; absent for lemmatizers without frequency data.
+   */
+  rank?: number;
 }
 
 /**
@@ -126,6 +131,7 @@ export interface LemmaWithMorph extends LemmaWithPOS {
 export interface LemmatizerLike {
   lemmatize(word: string): string[];
   lemmatizeWithPOS?(word: string): LemmaWithPOS[];
+  lemmatizeWithMorph?(word: string): LemmaWithMorph[];
   /** True if the word form is in the dictionary (no unknown-form fallback). */
   isKnown?(word: string): boolean;
 }

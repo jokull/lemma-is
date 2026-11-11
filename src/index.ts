@@ -69,6 +69,8 @@ export {
   createKnownLemmaFilter,
   PROTECTED_LEMMAS,
   DERIVATIONAL_SUFFIX_LEMMAS,
+  PRODUCTIVE_PREFIXES,
+  NEVER_PART_LEMMAS,
   type CompoundSplit,
   type CompoundSplitterOptions,
   type CompoundSplitMode,
