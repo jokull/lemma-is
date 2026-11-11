@@ -80,7 +80,15 @@ Hypothesis: in `X- og Y` the shared tail (nefnd, ráðherra, miðlun) is the gen
 pure noise at query time. Change (rule): `coordinationWords` returns the reconstructed tail; its lemmas are filtered out
 of the coordination token's compound parts. Full words and modifiers kept (`umhverfisnefnd, samgöngunefnd, umhverfi`).
 Tests: compound-recursion asserts no bare `nefnd` / `ráðherra` / `miðlun`. Suite 411 passed.
-Blind re-judge: _pending_.
+Blind re-judge (round 2, same judge, Y control returned identical lists): `mennta- og barnamálaráðherra` 0.2 → **1.0**
+(= 0.12.0), `umhverfis- og samgöngunefnd` 0.4 → **0.6** (0.12.0 0.8 via its heavier modifier-part weighting), `allsherjar- og
+menntamálanefnd` 1.0 = 1.0; 15 tied queries byte-identical (leikskólar ranks 8↔9 swap). Projected mean P@5 ≈ **0.797 vs 0.788**.
+Verdict: ready to ship. Decision: **released as 0.13.0** (E1 + E2).
+
+Next smallest step (later batch, E3 candidate): the bare *modifier* in a hyphen expansion (`mynd` / `hljóð` in `hljóð- og
+myndmiðlun`) floods the same way the bare head did; rank whole-conjunct matches above modifier-only matches, or drop the
+modifier when it is a frequent simplex. Verify: `hljóð- og myndmiðlun` brings the myndmiðlun speech to #1 and
+`umhverfis- og samgöngunefnd` stays ≥ 0.6.
 
 ## Directions not to repeat
 
