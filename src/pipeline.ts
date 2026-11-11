@@ -342,8 +342,10 @@ export function processText(
         const split = compoundSplitter.split(tokenText);
         if (split.isCompound) {
           processed.compoundSplit = split;
-          // Add component lemmas from parts (in addition to direct lemmas)
-          const partLemmas = split.parts.flatMap((c) => getLemmas(c));
+          // Parts are already lemmas (headwords). Re-lemmatizing them would
+          // expand each headword into its homographs (stjóri → stjóra/stjór,
+          // heilbrigði → heilbrigður, kerfi → kerfa) — pure index noise.
+          const partLemmas = [...split.parts];
           processed.compoundLemmas = partLemmas;
           processed.lemmas = [...new Set([...lemmas, ...partLemmas])];
         }
@@ -490,9 +492,7 @@ export function extractIndexableLemmas(
 
     // Also add compound parts if split
     if (token.compoundSplit?.isCompound) {
-      const partLemmas = token.compoundLemmas
-        ? token.compoundLemmas
-        : token.compoundSplit.parts.flatMap((p) => lemmatizer.lemmatize(p));
+      const partLemmas = token.compoundLemmas ?? token.compoundSplit.parts;
       for (const lemma of partLemmas) {
           if (!shouldFilter(lemma)) {
             lemmas.add(lemma);
