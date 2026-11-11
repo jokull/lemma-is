@@ -261,19 +261,21 @@ export function processText(
    * dictionary word (umhverfis + nefnd → umhverfisnefnd). Returns null for
    * ordinary tokens; the head alone when nothing reconstructs.
    */
-  const coordinationWords = (raw: string): { words: string[]; head: string } | null => {
+  const coordinationWords = (raw: string): { words: string[]; head: string; tail: string | null } | null => {
     const m = COORDINATION_TOKEN.exec(raw);
     if (!m) return null;
     const [, head, , full] = m;
     const words = [full];
+    let tail: string | null = null;
     for (let i = full.length - MIN_COORDINATION_TAIL; i >= 1; i--) {
       const candidate = head + full.slice(i);
       if (lemmatizer.isKnown?.(candidate)) {
         words.unshift(candidate);
+        tail = full.slice(i);
         break;
       }
     }
-    return { words, head };
+    return { words, head, tail };
   };
 
   const getLemmas = (raw: string): string[] => {
@@ -402,7 +404,14 @@ export function processText(
           // Parts are already lemmas (headwords). Re-lemmatizing them would
           // expand each headword into its homographs (stjóri → stjóra/stjór,
           // heilbrigði → heilbrigður, kerfi → kerfa) — pure index noise.
-          const partLemmas = [...split.parts];
+          // In a coordination the shared tail (nefnd in "umhverfis- og
+          // samgöngunefnd") is the generic head of BOTH words; as a part it
+          // ORs a bare "nefnd"/"ráðherra" into queries and floods results
+          // (EXPERIMENTS.md E1 verdict). Keep the full words and modifiers only.
+          const sharedTail = coordination?.tail
+            ? new Set(lemmatizer.lemmatize(coordination.tail).map((l) => l.toLowerCase()))
+            : null;
+          const partLemmas = sharedTail ? split.parts.filter((p) => !sharedTail.has(p)) : [...split.parts];
           processed.compoundLemmas = partLemmas;
           // An unknown word that decomposes is an Icelandic compound, not a
           // foreign name: drop the suffix-stripped guesses the unknown-word

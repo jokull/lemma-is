@@ -163,17 +163,21 @@ describe("Recursive compound decomposition (full model)", () => {
     const opts = { bigrams: full, compoundSplitter: splitter, removeStopwords: true };
     const tokens = processText("umhverfis- og samgöngunefnd", full, opts);
     expect(tokens).toHaveLength(1);
-    expect(tokens[0].lemmas).toEqual(["umhverfisnefnd", "samgöngunefnd", "umhverfi", "nefnd"]);
-    expect(tokens[0].compoundLemmas).toEqual(["umhverfi", "nefnd"]);
+    expect(tokens[0].lemmas).toEqual(["umhverfisnefnd", "samgöngunefnd", "umhverfi"]);
+    // the shared tail is never a part: a bare "nefnd" would flood committee searches (EXPERIMENTS.md E2)
+    expect(tokens[0].compoundLemmas).toEqual(["umhverfi"]);
     for (const text of ["umhverfis- og samgöngunefnd", "hljóð- og myndmiðlun", "allsherjar- eða menntamálanefnd"]) {
       for (const l of extractIndexableLemmas(text, full, opts)) {
         expect(l, text).not.toMatch(/\s|^og$|^eða$/);
       }
     }
     const idx = [...extractIndexableLemmas("hljóð- og myndmiðlun", full, opts)];
-    expect(idx).toEqual(expect.arrayContaining(["hljóðmiðlun", "myndmiðlun", "hljóð", "mynd", "miðlun"]));
+    expect(idx).toEqual(expect.arrayContaining(["hljóðmiðlun", "myndmiðlun", "hljóð", "mynd"]));
+    expect(idx).not.toContain("miðlun");
+    expect(buildSearchQuery("mennta- og barnamálaráðherra", full, opts).groups.flat()).not.toContain("ráðherra");
     // The same text at query time resolves to the same lexemes
     expect(buildSearchQuery("umhverfis- og samgöngunefnd", full, opts).groups.flat()).toContain("umhverfisnefnd");
+    expect(buildSearchQuery("umhverfis- og samgöngunefnd", full, opts).groups.flat()).not.toContain("nefnd");
   });
 
   it("an unknown word that decomposes keeps no suffix-stripped guess (L5)", () => {
